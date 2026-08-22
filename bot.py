@@ -73,7 +73,7 @@ if not TOKEN:
 if not ADMIN_IDS:
     raise ValueError("ADMIN_IDS cannot be empty!")
 
-WEBAPP_URL = os.getenv("WEBAPP_URL", "http://localhost:8080")
+WEBAPP_URL = os.getenv("WEBAPP_URL", "https://siketekub.onrender.com")
 
 SUPPORT_CHANNEL_LINK = os.getenv("SUPPORT_CHANNEL_LINK", "https://t.me/siketekub")
 SUPPORT_CHANNEL_ID = os.getenv("SUPPORT_CHANNEL_ID", "@siketekub")
