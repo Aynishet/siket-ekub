@@ -67,7 +67,7 @@ from aiogram.types import (
 
 import aiosqlite
 from dotenv import load_dotenv
-from database import init_db, backup_database, DB_NAME, process_refund
+from database import init_db, backup_database, process_refund
 
 # =====================================================
 # FIX: Windows Encoding
