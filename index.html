@@ -1,0 +1,1403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Siket Ekub | Premium WebApp</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+:root {
+  --bg: #020B1C;
+  --bg-card: #061A24;
+  --bg-card-hover: #092533;
+  --bg-surface: #071F29;
+  --bg-input: #092533;
+  --primary: #DDBB5A;
+  --primary-light: #F5D87B;
+  --primary-dark: #B8923E;
+  --primary-gradient: linear-gradient(135deg, #F5D87B 0%, #DDBB5A 100%);
+  --text: #FFFFFF;
+  --text-secondary: #D5E1E2;
+  --text-muted: #8AA9A6;
+  --border: rgba(221, 187, 90, 0.20);
+  --border-subtle: rgba(255, 255, 255, 0.05);
+  --shadow: 0 8px 32px -8px rgba(0, 0, 0, 0.60);
+  --shadow-glow: 0 0 40px rgba(221, 187, 90, 0.08);
+  --radius: 14px;
+  --radius-sm: 8px;
+  --available-color: #DDBB5A;
+  --sold-color: #F87171;
+  --selected-color: #DDBB5A;
+  --pending-color: #FBBF24;
+  --green: #0A6B63;
+  --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --font: 'Poppins', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; font-family: var(--font); }
+    body { background: var(--bg); color: var(--text); min-height: 100vh; padding-bottom: 85px; overflow-x: hidden; }
+    .app { max-width: 480px; margin: 0 auto; min-height: 100vh; position: relative; }
+
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: var(--bg-surface); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 4px; }
+
+    /* ===== HEADER ===== */
+    .top-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      background: rgba(2, 11, 28, 0.92);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .logo-box img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 2px solid var(--primary); }
+    .brand h1 { font-size: 18px; font-weight: 800; color: var(--text); letter-spacing: -0.5px; }
+    .brand h1 span { color: var(--primary); }
+    .brand p { font-size: 10px; color: var(--text-muted); font-weight: 400; letter-spacing: 0.5px; text-transform: uppercase; }
+
+    .header-actions { display: flex; gap: 8px; align-items: center; }
+    .wallet-badge {
+      background: rgba(221, 187, 90, 0.08);
+      border: 1px solid var(--border);
+      color: var(--primary-light);
+      padding: 5px 14px;
+      border-radius: 24px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+    .wallet-badge:hover { background: rgba(221, 187, 90, 0.15); transform: scale(1.02); }
+    .lang-btn {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      padding: 5px 12px;
+      border-radius: 24px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+    .lang-btn:hover { border-color: var(--primary); color: var(--text); }
+
+    .page { display: none; padding: 12px 16px; animation: fadeSlide 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+    .page.active { display: block; }
+    @keyframes fadeSlide { from { opacity: 0; transform: translateY(12px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+    /* ===== HERO SLIDER ===== */
+    .hero-slider {
+      position: relative;
+      width: 100%;
+      height: 420px;
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 18px;
+      box-shadow: var(--shadow);
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+    }
+    .hero-slide {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      opacity: 1;
+      transform: translateX(100%);
+      transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      align-items: flex-end;
+      will-change: transform;
+    }
+    .hero-slide.active { 
+      transform: translateX(0);
+      z-index: 2;
+    }
+    .hero-slide.prev {
+      transform: translateX(-100%);
+      z-index: 1;
+    }
+    .hero-slide:first-child {
+      transform: translateX(0);
+    }
+    .hero-slide img { 
+      position: absolute; 
+      top: 50%; 
+      left: 50%; 
+      width: 100%; 
+      height: 100%; 
+      object-fit:fill;
+      object-position: center;
+      z-index: 1; 
+      transform: translate(-50%, -50%) scale(1);
+      transition: transform 8s ease; 
+      background: var(--bg-card);
+    }
+    .hero-slide.active img { 
+      transform: translate(-50%, -50%) scale(1); 
+    }
+    
+    .slide-overlay {
+      position: relative;
+      z-index: 3;
+      background: linear-gradient(to top, rgba(2, 11, 28, 0.95) 20%, rgba(2, 11, 28, 0.2) 50%, transparent 100%);
+      width: 100%;
+      padding: 30px 20px 24px 20px;
+    }
+    .slide-overlay h3 { 
+      font-size: 20px; 
+      font-weight: 800; 
+      color: var(--text); 
+      text-shadow: 0 4px 30px rgba(0,0,0,0.8);
+      margin-bottom: 4px;
+    }
+    .slide-overlay h3 .highlight { color: var(--primary-light); }
+    .slide-overlay p { 
+      font-size: 13px; 
+      color: var(--text-secondary); 
+      margin-bottom: 12px; 
+      opacity: 0.95;
+      text-shadow: 0 2px 20px rgba(0,0,0,0.6);
+    }
+    .slide-btn { 
+      display: inline-block; 
+      background: var(--primary-gradient); 
+      color: #020B1C; 
+      padding: 10px 28px; 
+      border-radius: 12px; 
+      font-size: 14px; 
+      font-weight: 700; 
+      border: none; 
+      cursor: pointer; 
+      box-shadow: 0 4px 20px rgba(221, 187, 90, 0.4); 
+      transition: var(--transition);
+    }
+    .slide-btn:hover { transform: scale(1.05); box-shadow: 0 6px 30px rgba(221, 187, 90, 0.6); }
+
+    .slider-dots { 
+      position: absolute; 
+      bottom: 14px; 
+      right: 16px; 
+      display: flex; 
+      gap: 6px; 
+      z-index: 10; 
+    }
+    .slider-dots .dot { 
+      width: 7px; 
+      height: 7px; 
+      border-radius: 50%; 
+      background: rgba(255,255,255,0.3); 
+      cursor: pointer; 
+      transition: var(--transition); 
+    }
+    .slider-dots .dot.active { 
+      width: 24px; 
+      border-radius: 4px; 
+      background: var(--primary); 
+      box-shadow: 0 0 20px rgba(221, 187, 90, 0.4); 
+    }
+    /* ===== AD BANNER ===== */
+    .ad-banner {
+      width: 100%;
+      height: 80px;
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 18px;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      cursor: pointer;
+      transition: var(--transition);
+    }
+    .ad-banner:hover { border-color: var(--primary); transform: scale(1.01); }
+    .ad-banner img { width: 100%; height: 100%; display: block; object-fit: cover; }
+
+    .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+    .section-title { font-size: 16px; font-weight: 800; color: var(--text); display: flex; align-items: center; gap: 8px; letter-spacing: -0.3px; }
+    .section-title .icon { color: var(--primary); }
+    .item-count { font-size: 11px; color: var(--text-secondary); font-weight: 500; padding: 3px 12px; background: var(--bg-surface); border-radius: 20px; border: 1px solid var(--border-subtle); }
+
+    /* ===== PRIZE GRID ===== */
+    .ekub-grid { 
+      display: grid; 
+      grid-template-columns: repeat(2, 1fr); 
+      gap: 12px; 
+      width: 100%;
+    }
+    .prize-group-header {
+      grid-column: 1 / -1;
+      margin: 12px 0 4px 0;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--primary-light);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 6px;
+    }
+    .prize-group-header .group-icon { font-size: 18px; }
+    
+    .ekub-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius);
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      transition: var(--transition);
+      cursor: pointer;
+      width: 100%;
+    }
+    .ekub-card:hover { border-color: var(--primary); transform: translateY(-4px); box-shadow: var(--shadow-glow); }
+    .ekub-card:active { transform: scale(0.97); }
+    .ekub-card.grand { border-color: var(--border); background: linear-gradient(135deg, var(--bg-card), rgba(221, 187, 90, 0.06)); }
+    .ekub-card.shop { border-color: var(--border); background: linear-gradient(135deg, var(--bg-card), rgba(52, 211, 153, 0.06)); }
+    .ekub-card.cash { border-color: var(--border); background: linear-gradient(135deg, var(--bg-card), rgba(251, 191, 36, 0.06)); }
+    
+    .ekub-card.full-width {
+      grid-column: 1 / -1;
+    }
+    .ekub-card.full-width .img-container { height: 140px; }
+    .ekub-card.full-width .ekub-info { display: flex; flex-direction: column; align-items: center; text-align: center; }
+    .ekub-card.full-width .ekub-info h3 { font-size: 15px; }
+    .ekub-card.full-width .buy-btn { max-width: 200px; margin: 0 auto; }
+    
+    .ekub-badge { 
+      position: absolute; 
+      top: 10px; 
+      left: 10px; 
+      background: rgba(2, 11, 28, 0.88); 
+      backdrop-filter: blur(8px); 
+      color: var(--primary-light); 
+      padding: 4px 12px; 
+      font-size: 10px; 
+      font-weight: 700; 
+      border-radius: 8px; 
+      border: 1px solid var(--border); 
+      z-index: 5; 
+      letter-spacing: 0.3px; 
+    }
+    .img-container { 
+      width: 100%; 
+      height: 115px; 
+      background: #020B1C; 
+      overflow: hidden; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+      position: relative; 
+    }
+    .img-container::after { 
+      content: ''; 
+      position: absolute; 
+      bottom: 0; 
+      left: 0; 
+      right: 0; 
+      height: 40px; 
+      background: linear-gradient(to top, var(--bg-card), transparent); 
+    }
+    .img-container img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
+    .ekub-card:hover .img-container img { transform: scale(1.06); }
+    
+    .ekub-info { padding: 12px 14px 14px; }
+    .ekub-info h3 { 
+      font-size: 13px; 
+      font-weight: 700; 
+      color: var(--text); 
+      margin-bottom: 2px; 
+      letter-spacing: -0.2px; 
+    }
+    .ekub-details { 
+      font-size: 11px; 
+      color: var(--text-secondary); 
+      margin-bottom: 10px; 
+    }
+    .ekub-details strong { color: var(--primary-light); font-weight: 700; }
+    .buy-btn { 
+      display: block; 
+      width: 100%; 
+      background: var(--primary-gradient); 
+      color: #020B1C; 
+      text-align: center; 
+      padding: 7px; 
+      border-radius: var(--radius-sm); 
+      font-size: 12px; 
+      font-weight: 700; 
+      border: none; 
+      cursor: pointer; 
+      transition: var(--transition);
+    }
+    .buy-btn:hover { opacity: 0.9; transform: scale(0.98); }
+
+    .channel-links { display: flex; gap: 10px; margin-top: 18px; }
+    .channel-links a { 
+      flex: 1; 
+      background: var(--bg-card); 
+      border: 1px solid var(--border); 
+      border-radius: var(--radius); 
+      padding: 12px; 
+      text-align: center; 
+      color: var(--text-secondary); 
+      text-decoration: none; 
+      font-size: 12px; 
+      font-weight: 600; 
+      transition: var(--transition);
+    }
+    .channel-links a:hover { 
+      background: var(--bg-card-hover); 
+      border-color: var(--primary); 
+      color: var(--text); 
+      transform: translateY(-2px); 
+    }
+    .channel-links a i { color: var(--primary); margin-right: 6px; }
+
+    .registration-box { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; margin-bottom: 14px; }
+    .registration-box .form-group { margin-bottom: 14px; }
+    .registration-box label { font-size: 11px; color: var(--text-secondary); display: block; margin-bottom: 5px; font-weight: 500; }
+    .registration-box input { width: 100%; background: var(--bg-input); border: 1px solid var(--border-subtle); padding: 11px 14px; border-radius: var(--radius-sm); color: var(--text); font-size: 13px; outline: none; font-family: var(--font); }
+    .registration-box input:focus { border-color: var(--primary); box-shadow: 0 0 30px rgba(221, 187, 90, 0.04); }
+    .reg-status { font-size: 12px; margin-top: 8px; padding: 8px 12px; border-radius: 8px; font-weight: 500; }
+    .reg-status.success { color: var(--available-color); background: rgba(221, 187, 90, 0.08); }
+    .reg-status.error { color: var(--sold-color); background: rgba(248, 113, 113, 0.08); }
+    .reg-status.info { color: var(--primary-light); background: rgba(221, 187, 90, 0.08); }
+
+    .already-registered-box { background: var(--bg-card); border: 2px solid var(--primary); border-radius: var(--radius); padding: 20px; text-align: center; margin-bottom: 14px; }
+    .already-registered-box .check-icon { font-size: 48px; color: var(--primary); display: block; margin-bottom: 8px; }
+    .already-registered-box h3 { color: var(--text); font-size: 16px; margin-bottom: 4px; }
+    .already-registered-box p { color: var(--text-secondary); font-size: 12px; }
+
+    .ticket-picker-box { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
+    .ticket-stats { display: flex; gap: 14px; font-size: 11px; color: var(--text-secondary); flex-wrap: wrap; margin-bottom: 12px; padding: 8px 0; }
+    .ticket-stats span { display: flex; align-items: center; gap: 5px; font-weight: 500; }
+    .ticket-stats .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; box-shadow: 0 0 10px rgba(0,0,0,0.3); }
+    .dot-available { background: var(--available-color); }
+    .dot-sold { background: var(--sold-color); }
+    .dot-selected { background: var(--selected-color); }
+    .dot-pending { background: var(--pending-color); }
+
+    .ticket-grid-scroll { max-height: 400px; overflow-y: auto; padding: 4px; scrollbar-width: thin; scrollbar-color: var(--primary) var(--bg-surface); }
+    .ticket-grid-scroll::-webkit-scrollbar { width: 3px; }
+    .ticket-grid-scroll::-webkit-scrollbar-track { background: var(--bg-surface); border-radius: 4px; }
+    .ticket-grid-scroll::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 4px; }
+
+    .ticket-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+    .ticket-cell { background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 6px 0; text-align: center; font-size: 11px; font-weight: 600; cursor: pointer; min-height: 32px; display: flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; color: var(--text-secondary); position: relative; }
+    .ticket-cell.available { color: var(--available-color); border-color: rgba(221, 187, 90, 0.12); }
+    .ticket-cell.available:hover { border-color: var(--available-color); transform: scale(1.06); box-shadow: 0 0 20px rgba(221, 187, 90, 0.06); }
+    .ticket-cell.sold { background: rgba(248, 113, 113, 0.04); color: var(--sold-color); border-color: rgba(248, 113, 113, 0.06); cursor: not-allowed; opacity: 0.4; text-decoration: line-through; }
+    .ticket-cell.selected { background: var(--primary-gradient); color: #020B1C; border-color: var(--primary); font-weight: 700; box-shadow: 0 0 30px rgba(221, 187, 90, 0.15); transform: scale(1.04); }
+    .ticket-cell.selected::after { content: '✓'; position: absolute; top: -4px; right: -4px; background: var(--primary); color: #020B1C; border-radius: 50%; width: 14px; height: 14px; font-size: 8px; display: flex; align-items: center; justify-content: center; font-weight: 700; border: 1px solid var(--bg); }
+    .ticket-cell.pending { background: rgba(251, 191, 36, 0.04); color: var(--pending-color); border-color: rgba(251, 191, 36, 0.06); cursor: wait; }
+    .ticket-cell.pending::after { content: '⏳'; position: absolute; font-size: 8px; top: 1px; right: 4px; }
+
+    .ticket-actions { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; }
+    .ticket-actions button { flex: 1; min-width: 60px; padding: 8px 12px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 600; border: none; cursor: pointer; font-family: var(--font); transition: var(--transition); }
+    .btn-quick { background: rgba(221, 187, 90, 0.15); color: var(--available-color); }
+    .btn-quick:hover { background: rgba(221, 187, 90, 0.25); }
+    .btn-clear { background: rgba(248, 113, 113, 0.15); color: var(--sold-color); }
+    .btn-clear:hover { background: rgba(248, 113, 113, 0.25); }
+    .btn-buy { background: var(--primary-gradient); color: #020B1C; box-shadow: 0 4px 20px rgba(221, 187, 90, 0.3); }
+    .btn-buy:hover { opacity: 0.9; transform: scale(0.98); }
+    .btn-buy:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .payment-box { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 14px; }
+    .payment-summary { background: rgba(221, 187, 90, 0.06); border: 1px solid var(--border); padding: 12px 16px; border-radius: var(--radius-sm); margin-bottom: 14px; }
+    .payment-summary p { font-size: 11px; color: var(--text-secondary); margin-bottom: 2px; }
+    .payment-summary h3 { font-size: 20px; color: var(--primary-light); font-weight: 800; }
+
+    .bank-option { display: flex; align-items: center; justify-content: space-between; background: var(--bg-surface); border: 1px solid var(--border-subtle); padding: 12px 14px; border-radius: var(--radius-sm); margin-bottom: 8px; cursor: pointer; transition: var(--transition); }
+    .bank-option:hover { border-color: var(--primary); }
+    .bank-option.selected { border-color: var(--primary); background: rgba(221, 187, 90, 0.06); box-shadow: 0 0 30px rgba(221, 187, 90, 0.04); }
+    .bank-option span { font-size: 12px; color: var(--text); font-weight: 500; }
+    .bank-option strong { font-size: 13px; color: var(--primary-light); font-family: 'Courier New', monospace; font-weight: 700; }
+
+    .input-field { width: 100%; background: var(--bg-input); border: 1px solid var(--border-subtle); padding: 11px 14px; border-radius: var(--radius-sm); color: var(--text); font-size: 13px; margin: 6px 0; outline: none; font-family: var(--font); }
+    .input-field:focus { border-color: var(--primary); box-shadow: 0 0 30px rgba(221, 187, 90, 0.04); }
+
+    .upload-area { border: 2px dashed var(--border); border-radius: var(--radius-sm); padding: 20px; text-align: center; cursor: pointer; margin: 8px 0; background: var(--bg-surface); transition: var(--transition); }
+    .upload-area:hover { border-color: var(--primary); background: rgba(221, 187, 90, 0.02); }
+    .upload-area i { font-size: 30px; color: var(--text-muted); margin-bottom: 4px; display: block; }
+    .upload-area .upload-text { font-size: 12px; color: var(--text-secondary); }
+    .upload-area .file-name { font-size: 12px; color: var(--available-color); font-weight: 600; margin-top: 4px; }
+
+    .upload-preview { margin-top: 8px; display: none; border-radius: 8px; overflow: hidden; max-height: 120px; }
+    .upload-preview.show { display: block; }
+    .upload-preview img { width: 100%; height: auto; max-height: 120px; object-fit: contain; }
+
+    .primary-btn { width: 100%; background: var(--primary-gradient); color: #020B1C; border: none; padding: 13px; border-radius: var(--radius-sm); font-size: 14px; font-weight: 700; cursor: pointer; margin-top: 10px; font-family: var(--font); box-shadow: 0 4px 20px rgba(221, 187, 90, 0.3); transition: var(--transition); }
+    .primary-btn:hover { opacity: 0.9; transform: scale(0.98); }
+    .primary-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .account-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
+    .account-profile { text-align: center; margin-bottom: 14px; }
+    .account-profile img { width: 56px; height: 56px; border-radius: 50%; border: 2px solid var(--primary); object-fit: cover; box-shadow: 0 0 30px rgba(221, 187, 90, 0.1); }
+    .account-profile img:hover { transform: scale(1.05); }
+    .account-profile h3 { color: var(--text); font-size: 15px; margin-top: 6px; font-weight: 700; }
+    .account-profile p { font-size: 10px; color: var(--available-color); font-weight: 500; }
+
+    .account-item { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--border-subtle); font-size: 12px; color: var(--text-secondary); }
+    .account-item strong { color: var(--text); font-weight: 600; }
+    .account-item .primary { color: var(--primary-light); font-weight: 700; }
+    .account-item .clickable { color: var(--primary-light); cursor: pointer; text-decoration: none; font-weight: 600; }
+    .account-item .clickable:hover { text-decoration: underline; }
+
+    .refund-box { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 14px; }
+    .refund-box .amount { font-size: 22px; font-weight: 800; color: var(--primary-light); }
+
+    .winner-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px; text-align: center; }
+    .winner-card .icon { font-size: 40px; margin-bottom: 8px; display: block; }
+    .winner-card h3 { color: var(--text); font-size: 16px; margin-bottom: 4px; font-weight: 700; }
+    .winner-card p { font-size: 12px; color: var(--text-secondary); }
+    .winner-card a { color: var(--primary-light); text-decoration: none; font-weight: 600; }
+    .winner-card a:hover { text-decoration: underline; }
+
+    .history-item { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border-subtle); font-size: 12px; }
+    .history-item .status-badge { padding: 3px 10px; border-radius: 6px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; }
+    .status-badge.approved { background: rgba(221, 187, 90, 0.15); color: var(--available-color); }
+    .status-badge.pending { background: rgba(251, 191, 36, 0.15); color: var(--pending-color); }
+    .status-badge.rejected { background: rgba(248, 113, 113, 0.15); color: var(--sold-color); }
+    .status-badge.refunded { background: rgba(221, 187, 90, 0.15); color: var(--primary-light); }
+
+    .toast { position: fixed; bottom: 95px; left: 50%; transform: translateX(-50%); max-width: 440px; width: 90%; padding: 14px 20px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border); color: var(--text); font-size: 13px; font-weight: 500; z-index: 200; display: none; animation: toastIn 0.4s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: var(--shadow); backdrop-filter: blur(12px); }
+    .toast.show { display: block; }
+    .toast.success { border-color: var(--available-color); }
+    .toast.error { border-color: var(--sold-color); }
+    .toast.info { border-color: var(--primary); }
+    @keyframes toastIn { from { opacity: 0; transform: translateX(-50%) translateY(24px) scale(0.96); } to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); } }
+
+    /* ===== BOTTOM NAV ===== */
+    .bottom-nav { 
+      position: fixed; 
+      bottom: 0; 
+      left: 50%; 
+      transform: translateX(-50%); 
+      width: 100%; 
+      max-width: 480px; 
+      background: rgba(2, 11, 28, 0.97); 
+      backdrop-filter: blur(16px); 
+      display: flex; 
+      justify-content: space-around; 
+      padding: 6px 0 12px 0; 
+      border-top: 1px solid var(--border); 
+      z-index: 100; 
+    }
+    .bottom-nav a { 
+      background: none; 
+      border: none; 
+      color: var(--text-muted); 
+      font-size: 9px; 
+      text-align: center; 
+      cursor: pointer; 
+      flex: 1; 
+      display: flex; 
+      flex-direction: column; 
+      align-items: center; 
+      gap: 2px; 
+      font-weight: 600; 
+      text-decoration: none; 
+      padding: 4px 0; 
+      position: relative; 
+      transition: var(--transition); 
+    }
+    .bottom-nav a:hover { color: var(--text); }
+    .bottom-nav a.active { 
+      color: var(--primary-light); 
+      text-shadow: 0 0 20px rgba(221, 187, 90, 0.2);
+    }
+    .bottom-nav a.active::after { 
+      content: ''; 
+      position: absolute; 
+      top: -1px; 
+      left: 50%; 
+      transform: translateX(-50%); 
+      width: 24px; 
+      height: 2px; 
+      background: var(--primary-gradient); 
+      border-radius: 0 0 2px 2px; 
+    }
+    .bottom-nav a .nav-icon { font-size: 19px; }
+    .bottom-nav a.active .nav-icon { 
+      transform: translateY(-2px); 
+      text-shadow: 0 0 20px rgba(221, 187, 90, 0.4);
+    }
+
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 480px) {
+      .ticket-grid { grid-template-columns: repeat(5, 1fr); gap: 4px; }
+      .ticket-cell { font-size: 9px; padding: 4px 0; min-height: 28px; }
+      .hero-slider { height: 380px; }
+      .slide-overlay { padding: 24px 16px 18px 16px; }
+      .slide-overlay h3 { font-size: 17px; }
+      .slide-overlay p { font-size: 12px; }
+      .slide-btn { font-size: 12px; padding: 8px 20px; }
+      .ekub-grid { gap: 10px; }
+      .img-container { height: 100px; }
+      .ekub-info h3 { font-size: 11px; }
+      .buy-btn { font-size: 10px; padding: 5px; }
+      .ekub-card.full-width .img-container { height: 120px; }
+      .ad-banner { height: 60px; }
+    }
+    @media (max-width: 380px) {
+      .ticket-grid { grid-template-columns: repeat(4, 1fr); }
+      .ekub-grid { grid-template-columns: repeat(2, 1fr); }
+      .hero-slider { height: 320px; }
+    }
+
+    html { scroll-behavior: smooth; }
+    ::selection { background: var(--primary); color: #020B1C; }
+  </style>
+</head>
+<body>
+
+  <div class="app">
+
+    <!-- ===== HEADER ===== -->
+    <header class="top-header">
+      <div class="brand">
+        <div class="logo-box"><img src="./assets/car/logo.png" alt="Logo" onerror="this.src='https://via.placeholder.com/40'"></div>
+        <div>
+          <h1>Siket <span>Ekub</span></h1>
+          <p>ስኬት እቁብ</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <span class="wallet-badge" id="userWallet" onclick="openPage('account', document.querySelectorAll('.bottom-nav a')[4])">
+          <i class="fas fa-wallet" style="margin-right:4px;"></i> <span id="walletAmount">0</span> ETB
+        </span>
+        <button class="lang-btn" id="langBtn" onclick="toggleLanguage()">EN</button>
+      </div>
+    </header>
+
+    <div class="toast" id="toast"></div>
+
+    <section id="home" class="page active">
+      <!-- ===== HERO SLIDER ===== -->
+      <div class="hero-slider" id="heroSlider">
+        <div class="hero-slide active">
+          <img src="./assets/car/1st.png" alt="1st Prize" onerror="this.src='https://via.placeholder.com/480x420/061A24/DDBB5A?text=BWD+Leopard+3'">
+          <div class="slide-overlay">
+            <h3>🥇 <span class="highlight">BWD Leopard 3</span></h3>
+            <p>Value: 8,000,000 ETB • Ticket: 3,000 ETB</p>
+            <button class="slide-btn" onclick="selectPrize('BWD Leopard 3', 3000)">Pick Ticket</button>
+          </div>
+        </div>
+        <div class="hero-slide">
+          <img src="./assets/car/2nd.png" alt="2nd Prize" onerror="this.src='https://via.placeholder.com/480x420/061A24/DDBB5A?text=Hyundai+Bayon'">
+          <div class="slide-overlay">
+            <h3>🥈 <span class="highlight">Hyundai Bayon</span></h3>
+            <p>Value: 5,000,000 ETB • Ticket: 3,000 ETB</p>
+            <button class="slide-btn" onclick="selectPrize('Hyundai Bayon', 3000)">Pick Ticket</button>
+          </div>
+        </div>
+        <div class="hero-slide">
+          <img src="./assets/car/3rd.png" alt="3rd Prize" onerror="this.src='https://via.placeholder.com/480x420/061A24/DDBB5A?text=Shop+Space'">
+          <div class="slide-overlay">
+            <h3>🏪 <span class="highlight">Shop Space</span></h3>
+            <p>Value: 4,000,000 ETB • Ticket: 3,000 ETB</p>
+            <button class="slide-btn" onclick="selectPrize('Shop Space', 3000)">Pick Ticket</button>
+          </div>
+        </div>
+        <div class="slider-dots">
+          <span class="dot active" onclick="goToSlide(0)"></span>
+          <span class="dot" onclick="goToSlide(1)"></span>
+          <span class="dot" onclick="goToSlide(2)"></span>
+        </div>
+      </div>
+
+      <!-- ===== AD BANNER ===== -->
+      <div class="ad-banner" onclick="window.open('https://t.me/siketekub', '_blank')">
+        <img src="./assets/car/ad1.png" alt="Advertisement" onerror="this.src='https://via.placeholder.com/480x80/061A24/DDBB5A?text=AD+Banner'">
+      </div>
+
+      <div class="section-header">
+        <h2 class="section-title"><span class="icon">🏆</span> All 10 Grand Prizes</h2>
+        <span class="item-count">10 items</span>
+      </div>
+
+      <div class="ekub-grid" id="prizeGrid"></div>
+
+      <div class="channel-links">
+        <a href="https://t.me/siketekub" target="_blank"><i class="fas fa-headset"></i> Support</a>
+        <a href="https://t.me/siketekubtiketo" target="_blank"><i class="fas fa-ticket-alt"></i> Tickets Channel</a>
+      </div>
+    </section>
+
+    <section id="register" class="page">
+      <div class="section-header"><h2 class="section-title"><span class="icon">📝</span> Registration</h2></div>
+      <div id="registrationContainer"></div>
+    </section>
+
+    <section id="tickets" class="page">
+      <div class="section-header">
+        <h2 class="section-title"><span class="icon">🎟</span> Select Your Numbers</h2>
+        <span class="item-count" id="selectedCountHeader">0 selected</span>
+      </div>
+
+      <div class="ticket-picker-box">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom:10px;">
+          <span style="font-size:12px; color:var(--text-secondary);">
+            Prize: <b id="selectedPrizeDisplay" style="color:var(--primary-light);">BWD Leopard 3</b>
+          </span>
+          <span style="font-size:12px; color:var(--primary-light);"><b id="selectedPriceDisplay">3,000</b> ETB</span>
+        </div>
+
+        <div class="ticket-stats">
+          <span><span class="dot dot-available"></span> <span id="countAvailable">0</span></span>
+          <span><span class="dot dot-selected"></span> <span id="countSelected">0</span></span>
+          <span><span class="dot dot-sold"></span> <span id="countSold">0</span></span>
+          <span><span class="dot dot-pending"></span> <span id="countPending">0</span></span>
+        </div>
+
+        <div class="ticket-grid-scroll" style="max-height: 400px; overflow-y: auto; padding: 4px;">
+          <div class="ticket-grid" id="ticketGrid" style="display:grid; grid-template-columns: repeat(5, 1fr); gap: 5px;"></div>
+        </div>
+
+        <div class="ticket-actions">
+          <button class="btn-quick" onclick="quickPick()"><i class="fas fa-random"></i> Quick</button>
+          <button class="btn-clear" onclick="clearSelection()"><i class="fas fa-times"></i> Clear</button>
+          <button class="btn-buy" id="proceedBtn" onclick="proceedToPayment()" disabled>
+            <i class="fas fa-shopping-cart"></i> Buy (<span id="buyCount">0</span>) — <span id="buyAmount">0</span> ETB
+          </button>
+        </div>
+      </div>
+
+      <div style="background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:14px;">
+        <h4 style="font-size:12px; color:var(--primary-light); margin-bottom:4px;">📊 My Active Tickets</h4>
+        <div id="myTicketsSummary" style="font-size:11px; color:var(--text-secondary);">No active tickets yet.</div>
+      </div>
+    </section>
+
+    <section id="payment" class="page">
+      <div class="section-header"><h2 class="section-title"><span class="icon">💳</span> Secure Payment</h2></div>
+
+      <div class="payment-box">
+        <div class="payment-summary">
+          <p>Amount to Pay for <span id="payTicketCount">0</span> Ticket(s)</p>
+          <h3 id="payTotalAmount">0 ETB</h3>
+        </div>
+
+        <p style="font-size:12px; color:var(--text-secondary); margin-bottom:10px; font-weight:500;">Transfer to:</p>
+        <div id="paymentAccounts"></div>
+      </div>
+
+      <div class="payment-box">
+        <p style="font-size:12px; color:var(--primary-light); font-weight:600; margin-bottom:8px;">📸 Upload Receipt</p>
+        <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+          <i class="fas fa-cloud-upload-alt"></i>
+          <div class="upload-text">Tap to upload screenshot</div>
+          <div class="file-name" id="fileName"></div>
+        </div>
+        <div class="upload-preview" id="uploadPreview">
+          <img id="previewImage" src="#" alt="Receipt preview">
+        </div>
+        <input type="file" id="fileInput" accept="image/*" style="display:none;" onchange="handleFileUpload(this)">
+      </div>
+
+      <div class="payment-box">
+        <label style="font-size:11px; color:var(--text-secondary);">Transaction Reference:</label>
+        <input type="text" class="input-field" id="txRefInput" placeholder="e.g. FT26218Q7CMF">
+        <button class="primary-btn" onclick="submitPayment()"><i class="fas fa-paper-plane"></i> Submit Payment</button>
+      </div>
+    </section>
+
+    <section id="winners" class="page">
+      <div class="section-header"><h2 class="section-title"><span class="icon">🏆</span> Winners Hall of Fame</h2></div>
+      <div id="winnersList">
+        <div class="winner-card">
+          <span class="icon">🏆</span>
+          <h3>Next Winner Could Be You!</h3>
+          <p>Live broadcast on <a href="https://t.me/siketekubtiketo" target="_blank">@siketekubtiketo</a></p>
+        </div>
+      </div>
+    </section>
+
+    <section id="account" class="page">
+      <div class="section-header"><h2 class="section-title"><span class="icon">👤</span> My Account</h2></div>
+      <div class="account-card">
+        <div class="account-profile">
+          <img src="./assets/car/logo.png" alt="Profile" onerror="this.src='https://via.placeholder.com/56'">
+          <h3 id="accName">User</h3>
+          <p>✅ Verified</p>
+        </div>
+        <div class="account-item"><span>User ID</span><strong id="accId">--</strong></div>
+        <div class="account-item"><span>Phone</span><strong id="accPhone">Not set</strong></div>
+        <div class="account-item"><span>Balance</span><strong class="primary" id="accBalance">0 ETB</strong></div>
+        <div class="account-item"><span>My Ticket Numbers</span><strong id="accTicketNumbers">None</strong></div>
+        <div class="account-item"><span>Total Tickets</span><strong id="accTickets">0</strong></div>
+        <div class="account-item"><span>Total Spent</span><strong class="primary" id="accSpent">0 ETB</strong></div>
+        <div class="account-item"><span>Refund</span><strong><a class="clickable" onclick="requestRefund()">Request Refund</a></strong></div>
+        <div class="account-item"><span>History</span><strong><a class="clickable" onclick="toggleHistory()">View All</a></strong></div>
+        <div class="account-item"><span>Support</span><a href="https://t.me/siketekub" target="_blank" style="color:var(--primary-light); text-decoration:none;">@siketekub</a></div>
+      </div>
+
+      <div id="historyContainer" style="display:none; margin-top:12px;">
+        <div class="section-header"><h2 class="section-title" style="font-size:13px;">📋 Transaction History</h2></div>
+        <div id="historyList" style="background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:14px;"></div>
+      </div>
+
+      <div id="refundBox" style="display:none; margin-top:12px;">
+        <div class="refund-box">
+          <h4 style="color:var(--primary-light); margin-bottom:8px;">🔄 Refund Request</h4>
+          <p style="font-size:12px; color:var(--text-secondary);">Your current balance: <span class="amount" id="refundBalance">0 ETB</span></p>
+          <p style="font-size:11px; color:var(--text-secondary); margin:4px 0 8px;">Enter reason for refund:</p>
+          <input type="text" class="input-field" id="refundReason" placeholder="e.g. Overpayment">
+          <button class="primary-btn" onclick="submitRefund()">Submit Refund Request</button>
+        </div>
+      </div>
+    </section>
+
+    <nav class="bottom-nav">
+      <a class="active" onclick="openPage('home', this)">
+        <span class="nav-icon">🏠</span>
+        <span>Home</span>
+      </a>
+      <a onclick="openPage('register', this)">
+        <span class="nav-icon">📝</span>
+        <span>Register</span>
+      </a>
+      <a onclick="openPage('tickets', this)">
+        <span class="nav-icon">🎟</span>
+        <span>Tickets</span>
+      </a>
+      <a onclick="openPage('payment', this)">
+        <span class="nav-icon">💳</span>
+        <span>Payment</span>
+      </a>
+      <a onclick="openPage('account', this)">
+        <span class="nav-icon">👤</span>
+        <span>Account</span>
+      </a>
+    </nav>
+
+  </div>
+
+  <script>
+    let tg = window.Telegram?.WebApp;
+    if (tg) { tg.ready(); tg.expand(); }
+
+    const userInfo = tg?.initDataUnsafe?.user || { id: "99887766", first_name: "Valued User" };
+
+    // API Base - uses your dashboard_server.py endpoints
+    const API_BASE = window.location.origin + '/api';
+    let currentUser = { id: userInfo.id, name: userInfo.first_name || "User", phone: "", address: "", balance: 0, tickets: [], transactions: [], totalSpent: 0, isRegistered: false };
+    const state = { selectedPrize: 'BWD Leopard 3', selectedPrice: 3000, selectedTypeId: null, totalTickets: 20000, ticketData: [], chosenTickets: [], selectedBank: 'CBE', uploadedFile: null, lang: 'EN' };
+
+    const PRIZES_DATA = [
+      { rank: '🥇', name: 'BWD Leopard 3', value: '8,000,000 ETB', price: 3000, category: 'vehicles', image: './assets/car/1st.png', badge: '1st Prize', group: 'top3', fullWidth: false },
+      { rank: '🥈', name: 'Hyundai Bayon', value: '5,000,000 ETB', price: 3000, category: 'vehicles', image: './assets/car/2nd.png', badge: '2nd Prize', group: 'top3', fullWidth: false },
+      { rank: '🏪', name: 'Shop Space', value: '4,000,000 ETB', price: 3000, category: 'property', image: './assets/car/3rd.png', badge: '3rd Prize', group: 'shop', fullWidth: true },
+      { rank: '💰', name: '1,000,000 ETB Cash', value: '1,000,000 ETB', price: 3000, category: 'cash', image: './assets/car/4th.png', badge: '4th Prize', group: 'cash', fullWidth: false },
+      { rank: '💰', name: '1,000,000 ETB Cash', value: '1,000,000 ETB', price: 3000, category: 'cash', image: './assets/car/5th.png', badge: '5th Prize', group: 'cash', fullWidth: false },
+      { rank: '💰', name: '1,000,000 ETB Cash', value: '1,000,000 ETB', price: 3000, category: 'cash', image: './assets/car/6th.png', badge: '6th Prize', group: 'cash', fullWidth: false },
+      { rank: '💰', name: '1,000,000 ETB Cash', value: '1,000,000 ETB', price: 3000, category: 'cash', image: './assets/car/7th.png', badge: '7th Prize', group: 'cash', fullWidth: false },
+      { rank: '💰', name: '500,000 ETB Cash', value: '500,000 ETB', price: 3000, category: 'cash', image: './assets/car/8th.png', badge: '8th Prize', group: 'cash', fullWidth: false },
+      { rank: '💰', name: '300,000 ETB Cash', value: '300,000 ETB', price: 3000, category: 'cash', image: './assets/car/9th.png', badge: '9th Prize', group: 'cash', fullWidth: false },
+      { rank: '💰', name: '200,000 ETB Cash', value: '200,000 ETB', price: 3000, category: 'cash', image: './assets/car/10th.png', badge: '10th Prize', group: 'cash', fullWidth: true }
+    ];
+
+    window.onload = function() { 
+      loadTickets(); 
+      renderPrizes(); 
+      checkRegistrationStatus();
+      loadAccount(); 
+      loadPaymentAccounts();
+      
+      setTimeout(function() {
+        startHeroSlider(); 
+      }, 300);
+      
+      setInterval(() => {
+        if (document.getElementById('tickets').classList.contains('active')) {
+          apiCall('/tickets').then(result => {
+            if (result.success && result.data) {
+              state.ticketData = result.data.tickets;
+              renderAllTickets();
+            }
+          }).catch(() => {});
+        }
+      }, 5000);
+    };
+
+    function showToast(message, type = 'info') { 
+      const toast = document.getElementById('toast'); 
+      toast.textContent = message; 
+      toast.className = 'toast show ' + type; 
+      clearTimeout(toast._timeout); 
+      toast._timeout = setTimeout(() => { toast.className = 'toast'; }, 3500); 
+    }
+    
+    function sendToBot(action, data = {}) { 
+      try { 
+        const payload = JSON.stringify({ action, ...data, user_id: currentUser.id }); 
+        if (tg && tg.sendData) tg.sendData(payload); 
+        console.log('📤 Sent to bot:', payload); 
+      } catch (e) { 
+        console.warn('Bot communication error:', e); 
+      } 
+    }
+    
+    function openPage(pageId, el) { 
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active')); 
+      document.getElementById(pageId).classList.add('active'); 
+      document.querySelectorAll('.bottom-nav a').forEach(a => a.classList.remove('active')); 
+      if (el) el.classList.add('active'); 
+      
+      if (pageId === 'tickets') { 
+        if (state.ticketData.length > 0) {
+          renderAllTickets();
+        } else {
+          loadTickets();
+        }
+      } 
+      if (pageId === 'account') loadAccount(); 
+      if (pageId === 'register') checkRegistrationStatus();
+    }
+
+    async function apiCall(endpoint, method = 'GET', data = null) {
+      try {
+        const options = { method: method, headers: { 'Content-Type': 'application/json' } };
+        if (data) options.body = JSON.stringify(data);
+        const response = await fetch(`${API_BASE}${endpoint}`, options);
+        if (!response.ok) { 
+          const text = await response.text(); 
+          console.error('API Error:', text.substring(0, 200)); 
+          return { success: false, error: `HTTP ${response.status}` }; 
+        }
+        const result = await response.json(); 
+        return result;
+      } catch (error) { 
+        console.error('API Error:', error); 
+        return { success: false, error: error.message }; 
+      }
+    }
+
+    async function checkRegistrationStatus() {
+      const container = document.getElementById('registrationContainer');
+      const result = await apiCall(`/user/${currentUser.id}`);
+      
+      if (result.success && result.data && result.data.phone_number) {
+        const data = result.data;
+        currentUser.isRegistered = true;
+        currentUser.phone = data.phone_number;
+        currentUser.address = data.address || 'N/A';
+        
+        container.innerHTML = `
+          <div class="already-registered-box">
+            <span class="check-icon">✅</span>
+            <h3>You Are Already Registered!</h3>
+            <p style="color:var(--text-secondary); margin-top:4px;">
+              📱 <strong>${data.phone_number}</strong>
+            </p>
+            <p style="color:var(--text-muted); font-size:11px; margin-top:4px;">
+              📍 ${data.address || 'Address not set'}
+            </p>
+            <p style="color:var(--text-muted); font-size:11px; margin-top:8px;">
+              Registered on: ${data.registration_date || 'N/A'}
+            </p>
+            <button class="primary-btn" style="margin-top:12px; width:auto; padding:8px 24px;" onclick="openPage('account', document.querySelectorAll('.bottom-nav a')[4])">
+              <i class="fas fa-user"></i> View My Account
+            </button>
+          </div>
+        `;
+      } else {
+        currentUser.isRegistered = false;
+        container.innerHTML = `
+          <div class="registration-box">
+            <div class="form-group">
+              <label>📱 Phone Number</label>
+              <input type="tel" id="regPhone" placeholder="e.g. 0912345678">
+            </div>
+            <div class="form-group">
+              <label>📍 Physical Address</label>
+              <input type="text" id="regAddress" placeholder="e.g. Addis Ababa, Bole">
+            </div>
+            <button class="primary-btn" onclick="registerUser()"><i class="fas fa-check-circle"></i> Register</button>
+            <div id="regStatus" class="reg-status"></div>
+          </div>
+        `;
+      }
+    }
+
+    async function registerUser() {
+      const phone = document.getElementById('regPhone').value.trim();
+      const address = document.getElementById('regAddress').value.trim();
+      const statusEl = document.getElementById('regStatus');
+      
+      if (!phone || !address) { 
+        statusEl.className = 'reg-status error'; 
+        statusEl.textContent = 'Please fill in both phone and address.'; 
+        return; 
+      }
+      if (!phone.match(/^09\d{8}$/)) { 
+        statusEl.className = 'reg-status error'; 
+        statusEl.textContent = 'Invalid phone number! Use 09XXXXXXXX format.'; 
+        return; 
+      }
+      
+      const result = await apiCall('/user/create', 'POST', { 
+        telegram_id: currentUser.id, 
+        phone_number: phone, 
+        address: address, 
+        full_name: currentUser.name 
+      });
+      
+      if (result.success) { 
+        currentUser.phone = phone; 
+        currentUser.address = address; 
+        currentUser.isRegistered = true;
+        statusEl.className = 'reg-status success'; 
+        statusEl.textContent = '✅ Registration successful!'; 
+        loadAccount(); 
+        showToast('✅ Registration successful!', 'success');
+        setTimeout(checkRegistrationStatus, 1000);
+      } else { 
+        statusEl.className = 'reg-status error'; 
+        statusEl.textContent = '❌ ' + (result.error || 'Registration failed'); 
+      }
+    }
+
+    let currentSlide = 0;
+    let slideInterval = null;
+    
+    function startHeroSlider() { 
+      if (slideInterval) {
+        clearInterval(slideInterval);
+        slideInterval = null;
+      }
+      
+      slideInterval = setInterval(() => { 
+        const slides = document.querySelectorAll('.hero-slide'); 
+        const dots = document.querySelectorAll('.slider-dots .dot'); 
+        if (slides.length === 0) return; 
+        
+        slides[currentSlide].classList.remove('active'); 
+        slides[currentSlide].classList.remove('prev');
+        if (dots[currentSlide]) dots[currentSlide].classList.remove('active'); 
+        
+        const nextSlide = (currentSlide + 1) % slides.length; 
+        slides[currentSlide].classList.add('prev');
+        currentSlide = nextSlide; 
+        slides[currentSlide].classList.add('active'); 
+        if (dots[currentSlide]) dots[currentSlide].classList.add('active'); 
+      }, 4500); 
+    }
+    
+    function goToSlide(index) { 
+      if (slideInterval) {
+        clearInterval(slideInterval);
+        slideInterval = null;
+      }
+      
+      const slides = document.querySelectorAll('.hero-slide'); 
+      const dots = document.querySelectorAll('.slider-dots .dot'); 
+      if (slides.length === 0) return;
+      
+      slides[currentSlide].classList.remove('active'); 
+      slides[currentSlide].classList.remove('prev');
+      if (dots[currentSlide]) dots[currentSlide].classList.remove('active'); 
+      
+      slides[currentSlide].classList.add('prev');
+      currentSlide = index; 
+      slides[currentSlide].classList.add('active'); 
+      if (dots[currentSlide]) dots[currentSlide].classList.add('active');
+      
+      slideInterval = setInterval(() => { 
+        const slides2 = document.querySelectorAll('.hero-slide'); 
+        const dots2 = document.querySelectorAll('.slider-dots .dot'); 
+        if (slides2.length === 0) return; 
+        
+        slides2[currentSlide].classList.remove('active'); 
+        slides2[currentSlide].classList.remove('prev');
+        if (dots2[currentSlide]) dots2[currentSlide].classList.remove('active'); 
+        
+        const nextSlide = (currentSlide + 1) % slides2.length; 
+        slides2[currentSlide].classList.add('prev');
+        currentSlide = nextSlide; 
+        slides2[currentSlide].classList.add('active'); 
+        if (dots2[currentSlide]) dots2[currentSlide].classList.add('active'); 
+      }, 4500); 
+    }
+
+    function renderPrizes() {
+      const grid = document.getElementById('prizeGrid');
+      
+      const top3 = PRIZES_DATA.filter(p => p.group === 'top3');
+      const shop = PRIZES_DATA.filter(p => p.group === 'shop');
+      const cash = PRIZES_DATA.filter(p => p.group === 'cash');
+      
+      let html = '';
+      
+      html += `<div class="prize-group-header"><span class="group-icon">🏆</span> TOP 3 GRAND PRIZES</div>`;
+      top3.forEach(p => {
+        html += `
+          <div class="ekub-card grand" onclick="selectPrize('${p.name}', ${p.price})">
+            <div class="ekub-badge">${p.rank} ${p.badge}</div>
+            <div class="img-container"><img src="${p.image}" alt="${p.name}" onerror="this.src='https://via.placeholder.com/150x110'"></div>
+            <div class="ekub-info">
+              <h3>${p.name}</h3>
+              <div class="ekub-details">Value: <strong>${p.value}</strong></div>
+              <button class="buy-btn">Pick Ticket</button>
+            </div>
+          </div>
+        `;
+      });
+      
+      html += `<div class="prize-group-header"><span class="group-icon">🏪</span> SHOP SPACE</div>`;
+      shop.forEach(p => {
+        html += `
+          <div class="ekub-card shop full-width" onclick="selectPrize('${p.name}', ${p.price})">
+            <div class="ekub-badge">${p.rank} ${p.badge}</div>
+            <div class="img-container"><img src="${p.image}" alt="${p.name}" onerror="this.src='https://via.placeholder.com/150x110'"></div>
+            <div class="ekub-info">
+              <h3>${p.name}</h3>
+              <div class="ekub-details">Value: <strong>${p.value}</strong></div>
+              <button class="buy-btn">Pick Ticket</button>
+            </div>
+          </div>
+        `;
+      });
+      
+      html += `<div class="prize-group-header"><span class="group-icon">💰</span> CASH PRIZES</div>`;
+      cash.forEach((p, index) => {
+        const isLast = index === cash.length - 1;
+        html += `
+          <div class="ekub-card cash ${isLast ? 'full-width' : ''}" onclick="selectPrize('${p.name}', ${p.price})">
+            <div class="ekub-badge">${p.rank} ${p.badge}</div>
+            <div class="img-container"><img src="${p.image}" alt="${p.name}" onerror="this.src='https://via.placeholder.com/150x110'"></div>
+            <div class="ekub-info">
+              <h3>${p.name}</h3>
+              <div class="ekub-details">Value: <strong>${p.value}</strong></div>
+              <button class="buy-btn">Pick Ticket</button>
+            </div>
+          </div>
+        `;
+      });
+      
+      grid.innerHTML = html;
+    }
+
+    function selectPrize(name, price) { 
+      state.selectedPrize = name; 
+      state.selectedPrice = price; 
+      state.chosenTickets = []; 
+      document.getElementById('selectedPrizeDisplay').textContent = name; 
+      document.getElementById('selectedPriceDisplay').textContent = price.toLocaleString(); 
+      openPage('tickets', document.querySelectorAll('.bottom-nav a')[2]); 
+    }
+
+    async function loadTickets() {
+      document.getElementById('selectedPrizeDisplay').textContent = state.selectedPrize;
+      document.getElementById('selectedPriceDisplay').textContent = state.selectedPrice.toLocaleString();
+      
+      const grid = document.getElementById('ticketGrid');
+      grid.innerHTML = '<div class="loading-spinner"><i class="fas fa-spinner"></i> Loading 20,000 tickets...</div>';
+      
+      const result = await apiCall('/tickets');
+      if (result.success && result.data) {
+        const data = result.data;
+        state.selectedTypeId = data.type_id;
+        state.totalTickets = data.total_slots || 20000;
+        state.ticketData = data.tickets;
+        renderAllTickets();
+        updateStats();
+      } else {
+        grid.innerHTML = '<p style="text-align:center;color:var(--text-secondary);">Failed to load tickets.</p>';
+      }
+    }
+
+    function renderAllTickets() {
+      const grid = document.getElementById('ticketGrid');
+      let html = '';
+      for (let i = 0; i < state.ticketData.length; i++) {
+        const ticket = state.ticketData[i];
+        const num = ticket.ticket_number;
+        const status = ticket.status;
+        const isSelected = state.chosenTickets.includes(num);
+        const cls = isSelected ? 'selected' : status;
+        html += `<div class="ticket-cell ${cls}" onclick="toggleTicket(${num})">${num}</div>`;
+      }
+      grid.innerHTML = html;
+      updateStats();
+    }
+
+    function toggleTicket(num) {
+      const ticketObj = state.ticketData.find(t => t.ticket_number === num);
+      if (!ticketObj) return;
+      
+      const status = ticketObj.status;
+      if (status === 'sold') { showToast('Ticket is already sold!', 'error'); return; }
+      if (status === 'pending') { showToast('Ticket is pending approval.', 'info'); return; }
+      
+      const pos = state.chosenTickets.indexOf(num);
+      if (pos > -1) state.chosenTickets.splice(pos, 1);
+      else state.chosenTickets.push(num);
+      renderAllTickets();
+    }
+
+    function updateStats() {
+      let av = 0, so = 0, pe = 0;
+      state.ticketData.forEach(t => {
+        if (t.status === 'available') av++;
+        else if (t.status === 'sold') so++;
+        else if (t.status === 'pending') pe++;
+      });
+      document.getElementById('countAvailable').textContent = av;
+      document.getElementById('countSold').textContent = so;
+      document.getElementById('countPending').textContent = pe;
+      document.getElementById('countSelected').textContent = state.chosenTickets.length;
+      document.getElementById('selectedCountHeader').textContent = `${state.chosenTickets.length} selected`;
+      document.getElementById('buyCount').textContent = state.chosenTickets.length;
+      
+      const totalAmt = state.chosenTickets.length * state.selectedPrice;
+      document.getElementById('buyAmount').textContent = totalAmt.toLocaleString();
+      document.getElementById('payTotalAmount').textContent = totalAmt.toLocaleString() + ' ETB';
+      document.getElementById('payTicketCount').textContent = state.chosenTickets.length;
+      document.getElementById('proceedBtn').disabled = state.chosenTickets.length === 0;
+    }
+
+    function quickPick() {
+      const available = [];
+      state.ticketData.forEach(t => { if (t.status === 'available' && !state.chosenTickets.includes(t.ticket_number)) available.push(t.ticket_number); });
+      if (available.length === 0) { showToast('No available tickets!', 'error'); return; }
+      const count = Math.min(5, available.length);
+      for (let i = 0; i < count; i++) { const randIdx = Math.floor(Math.random() * available.length); state.chosenTickets.push(available[randIdx]); available.splice(randIdx, 1); }
+      renderAllTickets(); showToast(`✅ ${count} tickets selected!`, 'success');
+    }
+
+    function clearSelection() { if (state.chosenTickets.length === 0) return; state.chosenTickets = []; renderAllTickets(); showToast('Selection cleared.', 'info'); }
+
+    function proceedToPayment() {
+      if (state.chosenTickets.length === 0) { 
+        showToast('Select at least one ticket!', 'error'); 
+        return; 
+      }
+
+      showToast('⏳ Verifying ticket availability...', 'info');
+      
+      apiCall('/tickets').then(result => {
+        if (result.success && result.data) {
+          const freshData = result.data;
+          state.ticketData = freshData.tickets;
+          
+          let soldTickets = [];
+          state.chosenTickets.forEach(num => {
+            const ticketObj = state.ticketData.find(t => t.ticket_number === num);
+            if (ticketObj && ticketObj.status === 'sold') {
+              soldTickets.push(num);
+            }
+          });
+
+          if (soldTickets.length > 0) {
+            state.chosenTickets = state.chosenTickets.filter(num => !soldTickets.includes(num));
+            renderAllTickets();
+            showToast(`⚠️ Ticket #${soldTickets.join(', #')} was just sold! Removed from selection.`, 'error');
+            
+            if (state.chosenTickets.length === 0) {
+              return;
+            }
+          }
+
+          openPage('payment', document.querySelectorAll('.bottom-nav a')[3]);
+        } else {
+          showToast('❌ Failed to verify tickets. Please try again.', 'error');
+        }
+      }).catch(() => {
+        showToast('❌ Connection error. Please try again.', 'error');
+      });
+    }
+
+    async function loadPaymentAccounts() {
+      const container = document.getElementById('paymentAccounts');
+      const result = await apiCall('/payment_accounts');
+      if (result.success) { 
+        container.innerHTML = result.data.map(account => 
+          `<div class="bank-option" onclick="selectBank('${account.name}', this)">
+            <span>🏦 ${account.name}</span>
+            <strong>${account.account}</strong>
+          </div>`
+        ).join(''); 
+        const firstOption = container.querySelector('.bank-option'); 
+        if (firstOption) firstOption.classList.add('selected'); 
+      }
+    }
+
+    function selectBank(bank, el) { 
+      state.selectedBank = bank; 
+      document.querySelectorAll('.bank-option').forEach(b => b.classList.remove('selected')); 
+      el.classList.add('selected'); 
+    }
+    
+    function handleFileUpload(input) { 
+      if (input.files && input.files[0]) { 
+        state.uploadedFile = input.files[0]; 
+        document.getElementById('fileName').textContent = '📎 ' + input.files[0].name; 
+        const reader = new FileReader(); 
+        reader.onload = function(e) { 
+          document.getElementById('previewImage').src = e.target.result; 
+          document.getElementById('uploadPreview').classList.add('show'); 
+        }; 
+        reader.readAsDataURL(input.files[0]); 
+        showToast('✅ Receipt uploaded!', 'success'); 
+      } 
+    }
+
+    async function submitPayment() {
+      const txRef = document.getElementById('txRefInput').value.trim();
+      if (!txRef && !state.uploadedFile) { 
+        showToast('Please provide a transaction reference or upload receipt.', 'error'); 
+        return; 
+      }
+      
+      const totalAmount = state.chosenTickets.length * state.selectedPrice;
+      const firstTicketNumber = state.chosenTickets[0];
+      const ticketObj = state.ticketData.find(t => t.ticket_number === firstTicketNumber);
+      
+      if (!ticketObj) { 
+        showToast('Selected ticket not found!', 'error'); 
+        return; 
+      }
+      
+      // Convert image to base64 if uploaded
+      let screenshotData = '';
+      if (state.uploadedFile) {
+        const reader = new FileReader();
+        screenshotData = await new Promise((resolve) => {
+          reader.onload = function(e) {
+            resolve(e.target.result.split(',')[1]); // Get base64 data
+          };
+          reader.readAsDataURL(state.uploadedFile);
+        });
+      }
+      
+      const result = await apiCall('/payments/create', 'POST', { 
+        telegram_id: currentUser.id, 
+        ticket_id: ticketObj.ticket_id, 
+        extracted_ref: txRef,
+        extracted_amount: totalAmount,
+        raw_sms: txRef,
+        screenshot_data: screenshotData
+      });
+      
+      if (result.success) { 
+        showToast(`✅ ${state.chosenTickets.length} ticket(s) submitted! Waiting for admin verification.`, 'success'); 
+        state.chosenTickets = []; 
+        document.getElementById('txRefInput').value = ''; 
+        document.getElementById('fileInput').value = ''; 
+        document.getElementById('fileName').textContent = ''; 
+        document.getElementById('uploadPreview').classList.remove('show'); 
+        renderAllTickets(); 
+        loadAccount(); 
+        openPage('tickets', document.querySelectorAll('.bottom-nav a')[2]); 
+      } else { 
+        showToast('❌ ' + (result.error || 'Payment submission failed'), 'error'); 
+      }
+    }
+
+    async function loadAccount() {
+      const result = await apiCall(`/user/${currentUser.id}`);
+      if (result.success && result.data) {
+        const data = result.data; 
+        currentUser.balance = data.balance; 
+        currentUser.totalSpent = data.total_spent; 
+        currentUser.tickets = data.tickets || []; 
+        currentUser.transactions = data.payments || [];
+        currentUser.phone = data.phone_number || 'Not set';
+        
+        document.getElementById('accName').textContent = data.full_name || 'User';
+        document.getElementById('accId').textContent = currentUser.id;
+        document.getElementById('accPhone').textContent = data.phone_number || 'Not set';
+        document.getElementById('accBalance').textContent = data.balance.toLocaleString() + ' ETB';
+        document.getElementById('accTickets').textContent = data.tickets ? data.tickets.length : 0;
+        document.getElementById('accSpent').textContent = data.total_spent.toLocaleString() + ' ETB';
+        document.getElementById('userWallet').textContent = data.balance.toLocaleString() + ' ETB';
+        document.getElementById('walletAmount').textContent = data.balance.toLocaleString();
+        document.getElementById('refundBalance').textContent = data.balance.toLocaleString() + ' ETB';
+        
+        if (data.tickets && data.tickets.length > 0) {
+          const ticketNumbers = data.tickets.map(t => `#${t.ticket_number}`).join(', ');
+          document.getElementById('accTicketNumbers').textContent = ticketNumbers;
+        } else {
+          document.getElementById('accTicketNumbers').textContent = 'None';
+        }
+        
+        renderMyTicketsSummary();
+      }
+    }
+
+    function renderMyTicketsSummary() {
+      const box = document.getElementById('myTicketsSummary');
+      if (currentUser.tickets.length === 0) { box.innerHTML = 'No active tickets yet.'; return; }
+      box.innerHTML = currentUser.tickets.slice(0, 5).map(t => 
+        `<div style="display:flex; justify-content:space-between; margin-bottom:4px; border-bottom:1px solid rgba(255,255,255,0.04); padding-bottom:4px;">
+          <span>Ticket #${t.ticket_number} (${t.game_name})</span>
+          <span style="color:var(--pending-color);">${t.status}</span>
+        </div>`
+      ).join('');
+    }
+
+    function toggleHistory() {
+      const container = document.getElementById('historyContainer'); 
+      const list = document.getElementById('historyList');
+      if (container.style.display === 'none') { 
+        container.style.display = 'block'; 
+        if (currentUser.transactions.length === 0) { 
+          list.innerHTML = '<p style="font-size:11px; color:var(--text-secondary);">No transactions found.</p>'; 
+        } else { 
+          list.innerHTML = currentUser.transactions.map(tx => 
+            `<div class="history-item">
+              <div>
+                <strong>${tx.amount.toLocaleString()} ETB</strong> (Ticket #${tx.ticket_number})<br>
+                <span style="color:var(--text-secondary);">${tx.date || 'N/A'}</span>
+              </div>
+              <span class="status-badge ${tx.status}">${(tx.status || 'pending').toUpperCase()}</span>
+            </div>`
+          ).join(''); 
+        } 
+      } else { 
+        container.style.display = 'none'; 
+      }
+    }
+
+    function requestRefund() { 
+      const box = document.getElementById('refundBox'); 
+      box.style.display = box.style.display === 'none' ? 'block' : 'none'; 
+      if (box.style.display === 'block') { 
+        document.getElementById('refundBalance').textContent = currentUser.balance.toLocaleString() + ' ETB'; 
+      } 
+    }
+    
+    async function submitRefund() {
+      const reason = document.getElementById('refundReason').value.trim();
+      if (!reason) { showToast('Please enter a refund reason.', 'error'); return; }
+      if (currentUser.balance <= 0) { showToast('No balance to refund.', 'error'); return; }
+      const result = await apiCall('/refund_request', 'POST', { 
+        telegram_id: currentUser.id, 
+        reason: reason 
+      });
+      if (result.success) { 
+        showToast('✅ Refund request submitted!', 'success'); 
+        document.getElementById('refundBox').style.display = 'none'; 
+        document.getElementById('refundReason').value = ''; 
+      } else { 
+        showToast('❌ ' + (result.error || 'Refund request failed'), 'error'); 
+      }
+    }
+
+    function toggleLanguage() { 
+      state.lang = state.lang === 'EN' ? 'AM' : 'EN'; 
+      document.getElementById('langBtn').textContent = state.lang; 
+      sendToBot('set_language', { language: state.lang }); 
+      showToast(`Language switched to ${state.lang}`, 'info'); 
+    }
+  </script>
+</body>
+</html>
