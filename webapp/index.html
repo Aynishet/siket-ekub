@@ -93,8 +93,7 @@
     .page.active { display: block; }
     @keyframes fadeSlide { from { opacity: 0; transform: translateY(12px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
-    /* ===== HERO SLIDER - PORTRAIT with Horizontal Slide ===== */
-    /* ===== HERO SLIDER - PORTRAIT with Horizontal Slide ===== */
+    /* ===== HERO SLIDER ===== */
     .hero-slider {
       position: relative;
       width: 100%;
@@ -204,7 +203,7 @@
       background: var(--primary); 
       box-shadow: 0 0 20px rgba(221, 187, 90, 0.4); 
     }
-    /* ===== AD BANNER (below hero) ===== */
+    /* ===== AD BANNER ===== */
     .ad-banner {
       width: 100%;
       height: 80px;
@@ -225,7 +224,7 @@
     .section-title .icon { color: var(--primary); }
     .item-count { font-size: 11px; color: var(--text-secondary); font-weight: 500; padding: 3px 12px; background: var(--bg-surface); border-radius: 20px; border: 1px solid var(--border-subtle); }
 
-    /* ===== PRIZE GRID - FULL WIDTH ===== */
+    /* ===== PRIZE GRID ===== */
     .ekub-grid { 
       display: grid; 
       grid-template-columns: repeat(2, 1fr); 
@@ -264,7 +263,6 @@
     .ekub-card.shop { border-color: var(--border); background: linear-gradient(135deg, var(--bg-card), rgba(52, 211, 153, 0.06)); }
     .ekub-card.cash { border-color: var(--border); background: linear-gradient(135deg, var(--bg-card), rgba(251, 191, 36, 0.06)); }
     
-    /* ===== FULL WIDTH CARDS ===== */
     .ekub-card.full-width {
       grid-column: 1 / -1;
     }
@@ -476,7 +474,7 @@
     .toast.info { border-color: var(--primary); }
     @keyframes toastIn { from { opacity: 0; transform: translateX(-50%) translateY(24px) scale(0.96); } to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); } }
 
-    /* ===== BOTTOM NAV - GOLD THEME ===== */
+    /* ===== BOTTOM NAV ===== */
     .bottom-nav { 
       position: fixed; 
       bottom: 0; 
@@ -582,7 +580,7 @@
     <div class="toast" id="toast"></div>
 
     <section id="home" class="page active">
-      <!-- ===== HERO SLIDER - PORTRAIT ===== -->
+      <!-- ===== HERO SLIDER ===== -->
       <div class="hero-slider" id="heroSlider">
         <div class="hero-slide active">
           <img src="./assets/car/1st.png" alt="1st Prize" onerror="this.src='https://via.placeholder.com/480x420/061A24/DDBB5A?text=BWD+Leopard+3'">
@@ -788,7 +786,7 @@
 
     const userInfo = tg?.initDataUnsafe?.user || { id: "99887766", first_name: "Valued User" };
 
-    // const API_BASE = window.location.origin + '/api';
+    // API Base - uses your dashboard_server.py endpoints
     const API_BASE = window.location.origin + '/api';
     let currentUser = { id: userInfo.id, name: userInfo.first_name || "User", phone: "", address: "", balance: 0, tickets: [], transactions: [], totalSpent: 0, isRegistered: false };
     const state = { selectedPrize: 'BWD Leopard 3', selectedPrice: 3000, selectedTypeId: null, totalTickets: 20000, ticketData: [], chosenTickets: [], selectedBank: 'CBE', uploadedFile: null, lang: 'EN' };
@@ -811,6 +809,7 @@
       renderPrizes(); 
       checkRegistrationStatus();
       loadAccount(); 
+      loadPaymentAccounts();
       
       setTimeout(function() {
         startHeroSlider(); 
@@ -828,8 +827,23 @@
       }, 5000);
     };
 
-    function showToast(message, type = 'info') { const toast = document.getElementById('toast'); toast.textContent = message; toast.className = 'toast show ' + type; clearTimeout(toast._timeout); toast._timeout = setTimeout(() => { toast.className = 'toast'; }, 3500); }
-    function sendToBot(action, data = {}) { try { const payload = JSON.stringify({ action, ...data, user_id: currentUser.id }); if (tg && tg.sendData) tg.sendData(payload); console.log('📤 Sent to bot:', payload); } catch (e) { console.warn('Bot communication error:', e); } }
+    function showToast(message, type = 'info') { 
+      const toast = document.getElementById('toast'); 
+      toast.textContent = message; 
+      toast.className = 'toast show ' + type; 
+      clearTimeout(toast._timeout); 
+      toast._timeout = setTimeout(() => { toast.className = 'toast'; }, 3500); 
+    }
+    
+    function sendToBot(action, data = {}) { 
+      try { 
+        const payload = JSON.stringify({ action, ...data, user_id: currentUser.id }); 
+        if (tg && tg.sendData) tg.sendData(payload); 
+        console.log('📤 Sent to bot:', payload); 
+      } catch (e) { 
+        console.warn('Bot communication error:', e); 
+      } 
+    }
     
     function openPage(pageId, el) { 
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active')); 
@@ -853,9 +867,17 @@
         const options = { method: method, headers: { 'Content-Type': 'application/json' } };
         if (data) options.body = JSON.stringify(data);
         const response = await fetch(`${API_BASE}${endpoint}`, options);
-        if (!response.ok) { const text = await response.text(); console.error('API Error:', text.substring(0, 200)); return { success: false, error: `HTTP ${response.status}` }; }
-        const result = await response.json(); return result;
-      } catch (error) { console.error('API Error:', error); return { success: false, error: error.message }; }
+        if (!response.ok) { 
+          const text = await response.text(); 
+          console.error('API Error:', text.substring(0, 200)); 
+          return { success: false, error: `HTTP ${response.status}` }; 
+        }
+        const result = await response.json(); 
+        return result;
+      } catch (error) { 
+        console.error('API Error:', error); 
+        return { success: false, error: error.message }; 
+      }
     }
 
     async function checkRegistrationStatus() {
@@ -921,9 +943,9 @@
         return; 
       }
       
-      const result = await apiCall('/register', 'POST', { 
+      const result = await apiCall('/user/create', 'POST', { 
         telegram_id: currentUser.id, 
-        phone: phone, 
+        phone_number: phone, 
         address: address, 
         full_name: currentUser.name 
       });
@@ -1097,7 +1119,7 @@
       let html = '';
       for (let i = 0; i < state.ticketData.length; i++) {
         const ticket = state.ticketData[i];
-        const num = ticket.number;
+        const num = ticket.ticket_number;
         const status = ticket.status;
         const isSelected = state.chosenTickets.includes(num);
         const cls = isSelected ? 'selected' : status;
@@ -1108,7 +1130,7 @@
     }
 
     function toggleTicket(num) {
-      const ticketObj = state.ticketData.find(t => t.number === num);
+      const ticketObj = state.ticketData.find(t => t.ticket_number === num);
       if (!ticketObj) return;
       
       const status = ticketObj.status;
@@ -1144,7 +1166,7 @@
 
     function quickPick() {
       const available = [];
-      state.ticketData.forEach(t => { if (t.status === 'available' && !state.chosenTickets.includes(t.number)) available.push(t.number); });
+      state.ticketData.forEach(t => { if (t.status === 'available' && !state.chosenTickets.includes(t.ticket_number)) available.push(t.ticket_number); });
       if (available.length === 0) { showToast('No available tickets!', 'error'); return; }
       const count = Math.min(5, available.length);
       for (let i = 0; i < count; i++) { const randIdx = Math.floor(Math.random() * available.length); state.chosenTickets.push(available[randIdx]); available.splice(randIdx, 1); }
@@ -1168,7 +1190,7 @@
           
           let soldTickets = [];
           state.chosenTickets.forEach(num => {
-            const ticketObj = state.ticketData.find(t => t.number === num);
+            const ticketObj = state.ticketData.find(t => t.ticket_number === num);
             if (ticketObj && ticketObj.status === 'sold') {
               soldTickets.push(num);
             }
@@ -1196,22 +1218,88 @@
     async function loadPaymentAccounts() {
       const container = document.getElementById('paymentAccounts');
       const result = await apiCall('/payment_accounts');
-      if (result.success) { container.innerHTML = result.data.map(account => `<div class="bank-option" onclick="selectBank('${account.name}', this)"><span>🏦 ${account.name}</span><strong>${account.account}</strong></div>`).join(''); const firstOption = container.querySelector('.bank-option'); if (firstOption) firstOption.classList.add('selected'); }
+      if (result.success) { 
+        container.innerHTML = result.data.map(account => 
+          `<div class="bank-option" onclick="selectBank('${account.name}', this)">
+            <span>🏦 ${account.name}</span>
+            <strong>${account.account}</strong>
+          </div>`
+        ).join(''); 
+        const firstOption = container.querySelector('.bank-option'); 
+        if (firstOption) firstOption.classList.add('selected'); 
+      }
     }
 
-    function selectBank(bank, el) { state.selectedBank = bank; document.querySelectorAll('.bank-option').forEach(b => b.classList.remove('selected')); el.classList.add('selected'); }
-    function handleFileUpload(input) { if (input.files && input.files[0]) { state.uploadedFile = input.files[0]; document.getElementById('fileName').textContent = '📎 ' + input.files[0].name; const reader = new FileReader(); reader.onload = function(e) { document.getElementById('previewImage').src = e.target.result; document.getElementById('uploadPreview').classList.add('show'); }; reader.readAsDataURL(input.files[0]); showToast('✅ Receipt uploaded!', 'success'); } }
+    function selectBank(bank, el) { 
+      state.selectedBank = bank; 
+      document.querySelectorAll('.bank-option').forEach(b => b.classList.remove('selected')); 
+      el.classList.add('selected'); 
+    }
+    
+    function handleFileUpload(input) { 
+      if (input.files && input.files[0]) { 
+        state.uploadedFile = input.files[0]; 
+        document.getElementById('fileName').textContent = '📎 ' + input.files[0].name; 
+        const reader = new FileReader(); 
+        reader.onload = function(e) { 
+          document.getElementById('previewImage').src = e.target.result; 
+          document.getElementById('uploadPreview').classList.add('show'); 
+        }; 
+        reader.readAsDataURL(input.files[0]); 
+        showToast('✅ Receipt uploaded!', 'success'); 
+      } 
+    }
 
     async function submitPayment() {
       const txRef = document.getElementById('txRefInput').value.trim();
-      if (!txRef && !state.uploadedFile) { showToast('Please provide a transaction reference or upload receipt.', 'error'); return; }
+      if (!txRef && !state.uploadedFile) { 
+        showToast('Please provide a transaction reference or upload receipt.', 'error'); 
+        return; 
+      }
+      
       const totalAmount = state.chosenTickets.length * state.selectedPrice;
       const firstTicketNumber = state.chosenTickets[0];
-      const ticketObj = state.ticketData.find(t => t.number === firstTicketNumber);
-      if (!ticketObj) { showToast('Selected ticket not found!', 'error'); return; }
-      const result = await apiCall('/submit_payment', 'POST', { telegram_id: currentUser.id, ticket_id: ticketObj.id, type_id: state.selectedTypeId, amount: totalAmount, ref_code: txRef, sms_text: state.uploadedFile ? 'Receipt uploaded via web' : txRef });
-      if (result.success) { showToast(`✅ ${state.chosenTickets.length} ticket(s) submitted! Waiting for admin verification.`, 'success'); state.chosenTickets = []; document.getElementById('txRefInput').value = ''; document.getElementById('fileInput').value = ''; document.getElementById('fileName').textContent = ''; document.getElementById('uploadPreview').classList.remove('show'); renderAllTickets(); loadAccount(); openPage('tickets', document.querySelectorAll('.bottom-nav a')[2]); }
-      else { showToast('❌ ' + (result.error || 'Payment submission failed'), 'error'); }
+      const ticketObj = state.ticketData.find(t => t.ticket_number === firstTicketNumber);
+      
+      if (!ticketObj) { 
+        showToast('Selected ticket not found!', 'error'); 
+        return; 
+      }
+      
+      // Convert image to base64 if uploaded
+      let screenshotData = '';
+      if (state.uploadedFile) {
+        const reader = new FileReader();
+        screenshotData = await new Promise((resolve) => {
+          reader.onload = function(e) {
+            resolve(e.target.result.split(',')[1]); // Get base64 data
+          };
+          reader.readAsDataURL(state.uploadedFile);
+        });
+      }
+      
+      const result = await apiCall('/payments/create', 'POST', { 
+        telegram_id: currentUser.id, 
+        ticket_id: ticketObj.ticket_id, 
+        extracted_ref: txRef,
+        extracted_amount: totalAmount,
+        raw_sms: txRef,
+        screenshot_data: screenshotData
+      });
+      
+      if (result.success) { 
+        showToast(`✅ ${state.chosenTickets.length} ticket(s) submitted! Waiting for admin verification.`, 'success'); 
+        state.chosenTickets = []; 
+        document.getElementById('txRefInput').value = ''; 
+        document.getElementById('fileInput').value = ''; 
+        document.getElementById('fileName').textContent = ''; 
+        document.getElementById('uploadPreview').classList.remove('show'); 
+        renderAllTickets(); 
+        loadAccount(); 
+        openPage('tickets', document.querySelectorAll('.bottom-nav a')[2]); 
+      } else { 
+        showToast('❌ ' + (result.error || 'Payment submission failed'), 'error'); 
+      }
     }
 
     async function loadAccount() {
@@ -1235,7 +1323,7 @@
         document.getElementById('refundBalance').textContent = data.balance.toLocaleString() + ' ETB';
         
         if (data.tickets && data.tickets.length > 0) {
-          const ticketNumbers = data.tickets.map(t => `#${t.number}`).join(', ');
+          const ticketNumbers = data.tickets.map(t => `#${t.ticket_number}`).join(', ');
           document.getElementById('accTicketNumbers').textContent = ticketNumbers;
         } else {
           document.getElementById('accTicketNumbers').textContent = 'None';
@@ -1248,26 +1336,68 @@
     function renderMyTicketsSummary() {
       const box = document.getElementById('myTicketsSummary');
       if (currentUser.tickets.length === 0) { box.innerHTML = 'No active tickets yet.'; return; }
-      box.innerHTML = currentUser.tickets.slice(0, 5).map(t => `<div style="display:flex; justify-content:space-between; margin-bottom:4px; border-bottom:1px solid rgba(255,255,255,0.04); padding-bottom:4px;"><span>Ticket #${t.number} (${t.game})</span><span style="color:var(--pending-color);">${t.status}</span></div>`).join('');
+      box.innerHTML = currentUser.tickets.slice(0, 5).map(t => 
+        `<div style="display:flex; justify-content:space-between; margin-bottom:4px; border-bottom:1px solid rgba(255,255,255,0.04); padding-bottom:4px;">
+          <span>Ticket #${t.ticket_number} (${t.game_name})</span>
+          <span style="color:var(--pending-color);">${t.status}</span>
+        </div>`
+      ).join('');
     }
 
     function toggleHistory() {
-      const container = document.getElementById('historyContainer'); const list = document.getElementById('historyList');
-      if (container.style.display === 'none') { container.style.display = 'block'; if (currentUser.transactions.length === 0) { list.innerHTML = '<p style="font-size:11px; color:var(--text-secondary);">No transactions found.</p>'; } else { list.innerHTML = currentUser.transactions.map(tx => `<div class="history-item"><div><strong>${tx.amount.toLocaleString()} ETB</strong> (Ticket #${tx.ticket})<br><span style="color:var(--text-secondary);">${tx.date || 'N/A'}</span></div><span class="status-badge ${tx.status}">${(tx.status || 'pending').toUpperCase()}</span></div>`).join(''); } }
-      else { container.style.display = 'none'; }
+      const container = document.getElementById('historyContainer'); 
+      const list = document.getElementById('historyList');
+      if (container.style.display === 'none') { 
+        container.style.display = 'block'; 
+        if (currentUser.transactions.length === 0) { 
+          list.innerHTML = '<p style="font-size:11px; color:var(--text-secondary);">No transactions found.</p>'; 
+        } else { 
+          list.innerHTML = currentUser.transactions.map(tx => 
+            `<div class="history-item">
+              <div>
+                <strong>${tx.amount.toLocaleString()} ETB</strong> (Ticket #${tx.ticket_number})<br>
+                <span style="color:var(--text-secondary);">${tx.date || 'N/A'}</span>
+              </div>
+              <span class="status-badge ${tx.status}">${(tx.status || 'pending').toUpperCase()}</span>
+            </div>`
+          ).join(''); 
+        } 
+      } else { 
+        container.style.display = 'none'; 
+      }
     }
 
-    function requestRefund() { const box = document.getElementById('refundBox'); box.style.display = box.style.display === 'none' ? 'block' : 'none'; if (box.style.display === 'block') { document.getElementById('refundBalance').textContent = currentUser.balance.toLocaleString() + ' ETB'; } }
+    function requestRefund() { 
+      const box = document.getElementById('refundBox'); 
+      box.style.display = box.style.display === 'none' ? 'block' : 'none'; 
+      if (box.style.display === 'block') { 
+        document.getElementById('refundBalance').textContent = currentUser.balance.toLocaleString() + ' ETB'; 
+      } 
+    }
+    
     async function submitRefund() {
       const reason = document.getElementById('refundReason').value.trim();
       if (!reason) { showToast('Please enter a refund reason.', 'error'); return; }
       if (currentUser.balance <= 0) { showToast('No balance to refund.', 'error'); return; }
-      const result = await apiCall('/refund_request', 'POST', { telegram_id: currentUser.id, amount: currentUser.balance, reason: reason });
-      if (result.success) { showToast('✅ Refund request submitted!', 'success'); document.getElementById('refundBox').style.display = 'none'; document.getElementById('refundReason').value = ''; }
-      else { showToast('❌ ' + (result.error || 'Refund request failed'), 'error'); }
+      const result = await apiCall('/refund_request', 'POST', { 
+        telegram_id: currentUser.id, 
+        reason: reason 
+      });
+      if (result.success) { 
+        showToast('✅ Refund request submitted!', 'success'); 
+        document.getElementById('refundBox').style.display = 'none'; 
+        document.getElementById('refundReason').value = ''; 
+      } else { 
+        showToast('❌ ' + (result.error || 'Refund request failed'), 'error'); 
+      }
     }
 
-    function toggleLanguage() { state.lang = state.lang === 'EN' ? 'AM' : 'EN'; document.getElementById('langBtn').textContent = state.lang; sendToBot('set_language', { language: state.lang }); showToast(`Language switched to ${state.lang}`, 'info'); }
+    function toggleLanguage() { 
+      state.lang = state.lang === 'EN' ? 'AM' : 'EN'; 
+      document.getElementById('langBtn').textContent = state.lang; 
+      sendToBot('set_language', { language: state.lang }); 
+      showToast(`Language switched to ${state.lang}`, 'info'); 
+    }
   </script>
 </body>
 </html>
