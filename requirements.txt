@@ -8,7 +8,4 @@ aiohttp>=3.9.0
 pandas>=2.0.0
 numpy>=1.24.0
 openpyxl>=3.1.0
-opencv-python-headless>=4.8.0
-easyocr>=1.7.0
-torch>=2.0.0
-Pillow>=10.0.0
+flask-cors==4.0.0
