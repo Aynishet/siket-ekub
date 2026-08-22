@@ -1,25 +1,32 @@
-# run.py - Production Launcher for Siket Ekub
+# run.py - Updated version
 import os
 import sys
-import subprocess
 import time
 import threading
-import signal
-import atexit
+import asyncio
+from datetime import datetime
 
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 os.chdir(PROJECT_DIR)
 
 def start_bot():
-    """Start the Telegram bot"""
+    """Start the Telegram bot in a separate thread with asyncio"""
     print("🤖 Starting Telegram Bot...")
-    subprocess.Popen(
-        [sys.executable, "bot.py"],
-        stdout=open("logs/bot.log", "a"),
-        stderr=open("logs/bot_error.log", "a"),
-        cwd=PROJECT_DIR
-    )
+    
+    def run_bot():
+        try:
+            from bot import main
+            asyncio.run(main())
+        except Exception as e:
+            print(f"❌ Bot error: {e}")
+            os.makedirs("logs", exist_ok=True)
+            with open("logs/bot_error.log", "a") as f:
+                f.write(f"{datetime.now()}: {e}\n")
+    
+    bot_thread = threading.Thread(target=run_bot, daemon=True)
+    bot_thread.start()
     print("✅ Bot started!")
+    return bot_thread
 
 def start_dashboard():
     """Start the dashboard with Waitress WSGI server"""
@@ -42,10 +49,13 @@ def main():
     asyncio.run(init_db())
     print("✅ Database initialized")
     
-    bot_thread = threading.Thread(target=start_bot, daemon=True)
-    bot_thread.start()
+    # Start bot in background thread
+    bot_thread = start_bot()
     
-    time.sleep(2)
+    # Wait a moment for bot to initialize
+    time.sleep(3)
+    
+    # Start dashboard (this blocks)
     start_dashboard()
 
 if __name__ == "__main__":
