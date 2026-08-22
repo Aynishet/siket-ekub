@@ -5,38 +5,47 @@ import time
 import threading
 import asyncio
 import signal
-import atexit
-import logging
 import traceback
 from datetime import datetime
 
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 os.chdir(PROJECT_DIR)
 
-# Global variables for cleanup
-bot_thread = None
-shutdown_event = threading.Event()
+# Global flag to track bot status
+bot_is_ready = False
 
 def start_bot():
-    """Start the Telegram bot in a separate thread"""
+    """Start the Telegram bot in a separate thread with proper error logging"""
     print("🤖 Starting Telegram Bot...")
     
     def run_bot():
+        global bot_is_ready
         try:
+            # Import here to avoid circular imports
             from bot import main
+            print("✅ Bot module imported, running main()...")
             asyncio.run(main())
+            bot_is_ready = True
+            print("✅ Bot main() completed successfully")
         except Exception as e:
             # Print to console for Render logs
-            print(f"❌❌❌ BOT CRASHED ❌❌❌")
+            print("=" * 60)
+            print("❌❌❌ BOT CRASHED ❌❌❌")
+            print("=" * 60)
             print(f"Error: {e}")
+            print("\nFull traceback:")
             traceback.print_exc()
+            print("=" * 60)
+            
             # Also write to a file for debugging
             os.makedirs("logs", exist_ok=True)
             with open("logs/bot_crash.log", "w") as f:
-                f.write(f"Time: {datetime.now()}\n")
+                f.write(f"Time: {datetime.now().isoformat()}\n")
                 f.write(f"Error: {e}\n")
                 traceback.print_exc(file=f)
+            bot_is_ready = False
     
+    # Create and start the thread
     bot_thread = threading.Thread(target=run_bot, daemon=True)
     bot_thread.start()
     print("✅ Bot thread started!")
@@ -47,29 +56,18 @@ def start_dashboard():
     print("🌐 Starting Dashboard...")
     from dashboard_server import app
     from waitress import serve
-    # Use the PORT environment variable if available (for Render)
-    port = int(os.environ.get('PORT', 8080))
+    # Use the PORT environment variable (Render default is 10000)
+    port = int(os.environ.get('PORT', 10000))
+    print(f"📡 Dashboard binding to port {port}")
     serve(app, host='0.0.0.0', port=port, threads=4)
-
-def cleanup():
-    """Cleanup function for graceful shutdown"""
-    print("🛑 Shutting down...")
-    if bot_thread and bot_thread.is_alive():
-        print("Waiting for bot to finish...")
-        # Give the bot a moment to clean up
-        time.sleep(1)
-
-def signal_handler(signum, frame):
-    """Handle shutdown signals"""
-    print(f"\nReceived signal {signum}")
-    cleanup()
-    sys.exit(0)
 
 def main():
     print("=" * 50)
     print("🚀 Starting Siket Ekub Production Server")
     print("=" * 50)
     print(f"📅 Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"📂 Working directory: {os.getcwd()}")
+    print(f"🐍 Python version: {sys.version}")
     
     # Create required directories
     os.makedirs("logs", exist_ok=True)
@@ -86,25 +84,28 @@ def main():
         print(f"⚠️ Database initialization warning: {e}")
         print("Continuing with existing database...")
     
-    # Register signal handlers for graceful shutdown
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
-    
     # Start bot in background thread
-    global bot_thread
     bot_thread = start_bot()
     
-    # Wait for bot to initialize
+    # Wait a moment for bot to start, then check status
     print("⏳ Waiting for bot to initialize...")
-    time.sleep(3)
+    time.sleep(5)
+    
+    if bot_is_ready:
+        print("✅ Bot is ready and running!")
+    else:
+        print("⚠️ Bot may not have started correctly. Check logs above for errors.")
+        print("   The dashboard will still run, but bot commands won't work.")
     
     # Start dashboard (this blocks)
+    print("🚀 Starting dashboard server...")
     try:
         start_dashboard()
     except KeyboardInterrupt:
         print("\n🛑 Keyboard interrupt received")
-    finally:
-        cleanup()
+    except Exception as e:
+        print(f"❌ Dashboard error: {e}")
+        traceback.print_exc()
 
 if __name__ == "__main__":
     main()
