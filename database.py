@@ -77,7 +77,7 @@ async def init_db():
         """)
         
         # =====================================================
-        # TABLE: payments
+        # TABLE: payments (ADDED screenshot_data column)
         # =====================================================
         await db.execute("""
             CREATE TABLE IF NOT EXISTS payments (
@@ -98,6 +98,7 @@ async def init_db():
                 refund_reason TEXT,
                 admin_notes TEXT,
                 is_underpayment BOOLEAN DEFAULT 0,
+                screenshot_data TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
@@ -381,7 +382,7 @@ async def get_pending_payments():
         async with db.execute("""
             SELECT p.payment_id, p.telegram_id, p.phone_number, p.ticket_number,
                    p.extracted_ref, p.extracted_amount, p.created_at, u.full_name,
-                   p.is_underpayment, p.admin_notes
+                   p.is_underpayment, p.admin_notes, p.screenshot_data
             FROM payments p
             JOIN users u ON p.user_id = u.user_id
             WHERE p.status = 'pending'
