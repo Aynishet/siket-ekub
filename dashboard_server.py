@@ -1,4 +1,4 @@
-# dashboard_server.py - Updated with WebApp at root
+# dashboard_server.py - Complete with WebApp serving
 import csv
 import io
 import os
@@ -201,16 +201,22 @@ def get_dashboard_metrics():
 def serve_webapp():
     """Serve the main WebApp at root URL"""
     try:
+        # Try to send index.html from current directory
         return send_from_directory('.', 'index.html')
     except Exception as e:
         print(f"Error serving webapp: {e}")
-        return "WebApp not found", 404
+        # Fallback: list files in directory
+        files = os.listdir('.')
+        return f"WebApp not found. Files in directory: {files}. Error: {e}", 404
 
 @app.route('/webapp')
 @app.route('/webapp/')
 def webapp_alt():
     """Alternative webapp route"""
-    return send_from_directory('.', 'index.html')
+    try:
+        return send_from_directory('.', 'index.html')
+    except Exception as e:
+        return f"WebApp not found at /webapp. Error: {e}", 404
 
 @app.route('/admin')
 def admin_dashboard():
@@ -234,7 +240,10 @@ def admin_dashboard():
 @app.route('/assets/<path:path>')
 def serve_assets(path):
     """Serve static assets"""
-    return send_from_directory('assets', path)
+    try:
+        return send_from_directory('assets', path)
+    except Exception as e:
+        return f"Asset not found: {path}. Error: {e}", 404
 
 # =====================================================
 # API ROUTES
