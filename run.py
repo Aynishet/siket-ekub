@@ -11,8 +11,18 @@ from datetime import datetime
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 os.chdir(PROJECT_DIR)
 
+# Global flag for shutdown
+shutdown_flag = False
+
+def signal_handler(signum, frame):
+    """Handle shutdown signals"""
+    global shutdown_flag
+    print(f"\n🛑 Received signal {signum}, shutting down...")
+    shutdown_flag = True
+    sys.exit(0)
+
 # =====================================================
-# RUN DASHBOARD IN BACKGROUND THREAD
+# DASHBOARD IN BACKGROUND THREAD
 # =====================================================
 
 def start_dashboard():
@@ -39,15 +49,22 @@ def start_dashboard():
     return dashboard_thread
 
 # =====================================================
-# RUN BOT IN MAIN THREAD
+# BOT IN MAIN THREAD
 # =====================================================
 
 def start_bot():
     """Start the Telegram bot in the main thread"""
     print("🤖 Starting Telegram Bot...")
     
+    # Set up signal handlers in main thread
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
     try:
+        # Import and run bot
+        import asyncio
         from bot import main
+        
         print("✅ Bot module imported, running main()...")
         asyncio.run(main())
         print("✅ Bot main() completed successfully")
@@ -90,9 +107,10 @@ def main():
         print("✅ Database initialized")
     except Exception as e:
         print(f"⚠️ Database initialization warning: {e}")
+        print("Continuing with existing database...")
     
     # Start dashboard in background thread
-    dashboard_thread = start_dashboard()
+    start_dashboard()
     
     # Give dashboard a moment to start
     time.sleep(2)
