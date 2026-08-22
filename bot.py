@@ -14,6 +14,7 @@ import re
 import io
 import ssl
 import signal
+import base64
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from queue import Queue
@@ -1004,7 +1005,7 @@ async def choice_back(callback: CallbackQuery):
     await callback.answer()
 
 # =====================================================
-# LANGUAGE SELECTION (Modified to handle callback)
+# LANGUAGE SELECTION
 # =====================================================
 
 @router.callback_query(F.data.startswith("lang_"))
@@ -1016,7 +1017,6 @@ async def select_language(callback: CallbackQuery, state: FSMContext):
     shared_state.set_language(uid, lang)
     t = Localization.get_text
     
-    # Show registration prompt with phone number request
     share_button = KeyboardButton(text=t(uid, "share_phone"), request_contact=True)
     kb = ReplyKeyboardMarkup(
         keyboard=[[share_button]], 
@@ -1445,7 +1445,6 @@ async def process_payment(message: Message, state: FSMContext):
         photo = message.photo[-1]
         file_info = await bot.get_file(photo.file_id)
         downloaded = await bot.download_file(file_info.file_path)
-        import base64
         screenshot_data = base64.b64encode(downloaded.read()).decode('utf-8')
         
         # Try to parse SMS from caption
@@ -1671,7 +1670,6 @@ async def match_payment(callback: CallbackQuery, state: FSMContext):
     
     (pay_id, ticket_id, user_id, telegram_id, phone, ticket_num, ref, amount, date, required_price, name, screenshot) = payment
     
-    # Show screenshot if available
     screenshot_text = ""
     if screenshot:
         screenshot_text = "📸 Screenshot attached to this payment"
@@ -1741,7 +1739,6 @@ async def approve_payment(callback: CallbackQuery):
     
     (pay_id, ticket_id, user_id, telegram_id, phone, ticket_num, ref, amount, date, required_price, name, ticket_status) = payment
     
-    # Prevent selling the same ticket twice
     if ticket_status == 'sold':
         await callback.answer("❌ This ticket is already sold! Rejecting payment.", show_alert=True)
         await DatabaseHelper.execute(
@@ -3213,14 +3210,12 @@ async def admin_create_game_slots(message: Message, state: FSMContext):
     prizes = data.get("prizes")
     price = 3000.0
     
-    # Insert ticket type
     cursor = await DatabaseHelper.execute(
         "INSERT INTO ticket_types (name, total_slots, price, is_active) VALUES (?, ?, ?, 1)",
         (game_name, total_slots, price)
     )
     type_id = cursor.lastrowid
     
-    # Generate tickets
     tickets_to_insert = []
     for i in range(1, total_slots + 1):
         tickets_to_insert.append((type_id, i, 'available'))
@@ -3263,7 +3258,6 @@ async def main():
     print(f"🎟️ Ticket Channel: {TICKET_CHANNEL_LINK}")
     print(f"👤 Admins: {ADMIN_IDS}")
     
-    # Patch signal handlers to work in any thread
     patch_signal_handlers()
     
     try:
