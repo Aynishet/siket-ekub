@@ -1253,56 +1253,57 @@
 
     // ✅ FIXED: submitPayment uses /payments/create
     async function submitPayment() {
-      const txRef = document.getElementById('txRefInput').value.trim();
-      if (!txRef && !state.uploadedFile) { 
-        showToast('Please provide a transaction reference or upload receipt.', 'error'); 
-        return; 
-      }
-      
-      const totalAmount = state.chosenTickets.length * state.selectedPrice;
-      const firstTicketNumber = state.chosenTickets[0];
-      const ticketObj = state.ticketData.find(t => t.ticket_number === firstTicketNumber);
-      
-      if (!ticketObj) { 
-        showToast('Selected ticket not found!', 'error'); 
-        return; 
-      }
-      
-      // Convert image to base64 if uploaded
-      let screenshotData = '';
-      if (state.uploadedFile) {
-        const reader = new FileReader();
-        screenshotData = await new Promise((resolve) => {
-          reader.onload = function(e) {
-            resolve(e.target.result.split(',')[1]); // Get base64 data
-          };
-          reader.readAsDataURL(state.uploadedFile);
-        });
-      }
-      
-      const result = await apiCall('/payments/create', 'POST', { 
-        telegram_id: currentUser.id, 
-        ticket_id: ticketObj.ticket_id, 
-        extracted_ref: txRef,
-        extracted_amount: totalAmount,
-        raw_sms: txRef,
-        screenshot_data: screenshotData
-      });
-      
-      if (result.success) { 
-        showToast(`✅ ${state.chosenTickets.length} ticket(s) submitted! Waiting for admin verification.`, 'success'); 
-        state.chosenTickets = []; 
-        document.getElementById('txRefInput').value = ''; 
-        document.getElementById('fileInput').value = ''; 
-        document.getElementById('fileName').textContent = ''; 
-        document.getElementById('uploadPreview').classList.remove('show'); 
-        renderAllTickets(); 
-        loadAccount(); 
-        openPage('tickets', document.querySelectorAll('.bottom-nav a')[2]); 
-      } else { 
-        showToast('❌ ' + (result.error || 'Payment submission failed'), 'error'); 
-      }
-    }
+  const txRef = document.getElementById('txRefInput').value.trim();
+  if (!txRef && !state.uploadedFile) { 
+    showToast('Please provide a transaction reference or upload receipt.', 'error'); 
+    return; 
+  }
+  
+  const totalAmount = state.chosenTickets.length * state.selectedPrice;
+  const firstTicketNumber = state.chosenTickets[0];
+  const ticketObj = state.ticketData.find(t => t.ticket_number === firstTicketNumber);
+  
+  if (!ticketObj) { 
+    showToast('Selected ticket not found!', 'error'); 
+    return; 
+  }
+  
+  // Convert image to base64 if uploaded
+  let screenshotData = '';
+  if (state.uploadedFile) {
+    const reader = new FileReader();
+    screenshotData = await new Promise((resolve) => {
+      reader.onload = function(e) {
+        resolve(e.target.result.split(',')[1]); // Get base64 data
+      };
+      reader.readAsDataURL(state.uploadedFile);
+    });
+  }
+  
+  // ✅ FIXED: Use /payments/create instead of /submit_payment
+  const result = await apiCall('/payments/create', 'POST', { 
+    telegram_id: currentUser.id, 
+    ticket_id: ticketObj.ticket_id, 
+    extracted_ref: txRef,
+    extracted_amount: totalAmount,
+    raw_sms: txRef,
+    screenshot_data: screenshotData
+  });
+  
+  if (result.success) { 
+    showToast(`✅ ${state.chosenTickets.length} ticket(s) submitted! Waiting for admin verification.`, 'success'); 
+    state.chosenTickets = []; 
+    document.getElementById('txRefInput').value = ''; 
+    document.getElementById('fileInput').value = ''; 
+    document.getElementById('fileName').textContent = ''; 
+    document.getElementById('uploadPreview').classList.remove('show'); 
+    renderAllTickets(); 
+    loadAccount(); 
+    openPage('tickets', document.querySelectorAll('.bottom-nav a')[2]); 
+  } else { 
+    showToast('❌ ' + (result.error || 'Payment submission failed'), 'error'); 
+  }
+}
 
     async function loadAccount() {
       const result = await apiCall(`/user/${currentUser.id}`);
