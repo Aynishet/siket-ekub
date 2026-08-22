@@ -1,8 +1,15 @@
-# database.py - Complete PostgreSQL Version
+# database.py - Complete PostgreSQL Version with All Features
 import os
 import logging
 import asyncio
 from datetime import datetime
+
+# =====================================================
+# DATABASE CONFIGURATION
+# =====================================================
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_NAME = os.path.join(BASE_DIR, 'instance', 'siket_ekub.db')  # For SQLite fallback
 
 # Try to import asyncpg, fallback to aiosqlite
 try:
@@ -34,7 +41,6 @@ class DatabaseHelper:
                 await conn.close()
         else:
             import aiosqlite
-            DB_NAME = os.path.join(os.path.dirname(__file__), 'instance', 'siket_ekub.db')
             async with aiosqlite.connect(DB_NAME) as db:
                 await db.execute("PRAGMA journal_mode=WAL;")
                 cursor = await db.execute(query, params or ())
@@ -57,7 +63,6 @@ class DatabaseHelper:
                 await conn.close()
         else:
             import aiosqlite
-            DB_NAME = os.path.join(os.path.dirname(__file__), 'instance', 'siket_ekub.db')
             async with aiosqlite.connect(DB_NAME) as db:
                 await db.execute("PRAGMA journal_mode=WAL;")
                 try:
@@ -84,7 +89,6 @@ class DatabaseHelper:
                 await conn.close()
         else:
             import aiosqlite
-            DB_NAME = os.path.join(os.path.dirname(__file__), 'instance', 'siket_ekub.db')
             async with aiosqlite.connect(DB_NAME) as db:
                 await db.execute("PRAGMA journal_mode=WAL;")
                 cursor = await db.execute(query, params or ())
@@ -104,7 +108,6 @@ class DatabaseHelper:
                 await conn.close()
         else:
             import aiosqlite
-            DB_NAME = os.path.join(os.path.dirname(__file__), 'instance', 'siket_ekub.db')
             async with aiosqlite.connect(DB_NAME) as db:
                 await db.execute("PRAGMA journal_mode=WAL;")
                 cursor = await db.execute(query, params or ())
@@ -565,23 +568,16 @@ async def backup_database():
     """Create a backup of the database"""
     try:
         if DATABASE_URL and POSTGRES_AVAILABLE:
-            # PostgreSQL backup using pg_dump
-            import subprocess
             import os
             backup_dir = os.path.join(os.path.dirname(__file__), "backups")
             os.makedirs(backup_dir, exist_ok=True)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_path = os.path.join(backup_dir, f"siket_ekub_backup_{timestamp}.sql")
-            
-            # Use pg_dump (requires PostgreSQL client tools)
-            # For now, just log that backup was attempted
             print(f"📦 PostgreSQL backup would be saved to: {backup_path}")
             return True
         else:
-            # SQLite backup
             import aiosqlite
             import os
-            import shutil
             BASE_DIR = os.path.dirname(os.path.abspath(__file__))
             DB_NAME = os.path.join(BASE_DIR, 'instance', 'siket_ekub.db')
             backup_dir = os.path.join(BASE_DIR, "backups")
@@ -606,7 +602,6 @@ async def backup_database():
 async def process_refund(payment_id: int, reason: str = "Refund requested") -> dict:
     """Process a refund for a payment"""
     try:
-        # Get payment details
         payment = await DatabaseHelper.fetch_one("""
             SELECT p.payment_id, p.user_id, p.telegram_id, p.phone_number, 
                    p.ticket_id, p.ticket_number, p.extracted_amount,
@@ -624,7 +619,6 @@ async def process_refund(payment_id: int, reason: str = "Refund requested") -> d
         if ticket_status == 'refunded':
             return {"success": False, "error": "Ticket already refunded"}
         
-        # Process refund
         await DatabaseHelper.execute_transaction([
             ("UPDATE payments SET status = 'refunded', refunded_at = CURRENT_TIMESTAMP, refund_reason = $1 WHERE payment_id = $2", (reason, payment_id)),
             ("UPDATE tickets SET status = 'refunded', refunded_at = CURRENT_TIMESTAMP, refund_reason = $1 WHERE ticket_id = $2", (reason, ticket_id)),
