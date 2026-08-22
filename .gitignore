@@ -1,12 +1,32 @@
-echo venv/ >> .gitignore
-echo __pycache__/ >> .gitignore
-echo *.pyc >> .gitignore
-echo instance/ >> .gitignore
-echo logs/ >> .gitignore
-echo *.db >> .gitignore
-echo *.sqlite >> .gitignore
-echo .env >> .gitignore
-echo file/ >> .gitignore
-echo siket-ekub/ >> .gitignore
-echo backups/ >> .gitignore
-echo *.zip >> .gitignore
+cat > .gitignore << 'EOF'
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+instance/
+*.db
+*.sqlite
+*.sqlite3
+logs/
+*.log
+.env
+.DS_Store
+Thumbs.db
+*.zip
+*.tar.gz
+*.rar
+file/
+siket-ekub/
+backups/
+*.exe
+*.dll
+*.so
+*.dylib
+EOF
