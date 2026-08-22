@@ -615,7 +615,7 @@
 
       <!-- ===== AD BANNER ===== -->
       <div class="ad-banner" onclick="window.open('https://t.me/siketekub', '_blank')">
-        <img src="./assets/ad.png" alt="Advertisement" onerror="this.src='https://via.placeholder.com/480x80/061A24/DDBB5A?text=AD+Banner'">
+        <img src="./assets/car/ad1.png" alt="Advertisement" onerror="this.src='https://via.placeholder.com/480x80/061A24/DDBB5A?text=AD+Banner'">
       </div>
 
       <div class="section-header">
@@ -943,6 +943,7 @@
         return; 
       }
       
+      // ✅ FIXED: Use correct field names for /user/create
       const result = await apiCall('/user/create', 'POST', { 
         telegram_id: currentUser.id, 
         phone_number: phone, 
@@ -1250,6 +1251,7 @@
       } 
     }
 
+    // ✅ FIXED: submitPayment uses /payments/create
     async function submitPayment() {
       const txRef = document.getElementById('txRefInput').value.trim();
       if (!txRef && !state.uploadedFile) { 
@@ -1278,6 +1280,7 @@
         });
       }
       
+      // ✅ FIXED: Use /payments/create instead of /submit_payment
       const result = await apiCall('/payments/create', 'POST', { 
         telegram_id: currentUser.id, 
         ticket_id: ticketObj.ticket_id, 
@@ -1375,6 +1378,7 @@
       } 
     }
     
+    // ✅ FIXED: submitRefund uses /refund_request
     async function submitRefund() {
       const reason = document.getElementById('refundReason').value.trim();
       if (!reason) { showToast('Please enter a refund reason.', 'error'); return; }
