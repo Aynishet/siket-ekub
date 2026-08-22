@@ -6,6 +6,8 @@ import threading
 import asyncio
 import signal
 import atexit
+import logging
+import traceback
 from datetime import datetime
 
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -16,29 +18,28 @@ bot_thread = None
 shutdown_event = threading.Event()
 
 def start_bot():
-    """Start the Telegram bot in a separate thread with proper asyncio event loop"""
+    """Start the Telegram bot in a separate thread"""
     print("🤖 Starting Telegram Bot...")
     
     def run_bot():
         try:
-            # Import here to avoid circular imports
             from bot import main
-            # Run the async main function
             asyncio.run(main())
         except Exception as e:
-            print(f"❌ Bot error: {e}")
-            import traceback
+            # Print to console for Render logs
+            print(f"❌❌❌ BOT CRASHED ❌❌❌")
+            print(f"Error: {e}")
             traceback.print_exc()
-            # Log the error
+            # Also write to a file for debugging
             os.makedirs("logs", exist_ok=True)
-            with open("logs/bot_error.log", "a") as f:
-                f.write(f"{datetime.now()}: {e}\n")
+            with open("logs/bot_crash.log", "w") as f:
+                f.write(f"Time: {datetime.now()}\n")
+                f.write(f"Error: {e}\n")
                 traceback.print_exc(file=f)
     
-    # Create and start the thread
     bot_thread = threading.Thread(target=run_bot, daemon=True)
     bot_thread.start()
-    print("✅ Bot started!")
+    print("✅ Bot thread started!")
     return bot_thread
 
 def start_dashboard():
