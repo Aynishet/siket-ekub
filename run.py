@@ -43,18 +43,27 @@ def start_bot():
 def start_dashboard():
     """Start the dashboard with Waitress WSGI server"""
     print("🌐 Starting Dashboard...")
-    from dashboard_server import app
-    from waitress import serve
-    
-    port = int(os.environ.get('PORT', 10000))
-    print(f"📡 Dashboard binding to port {port}")
-    serve(app, host='0.0.0.0', port=port, threads=4)
+    try:
+        from dashboard_server import app
+        from waitress import serve
+        
+        port = int(os.environ.get('PORT', 10000))
+        print(f"📡 Dashboard binding to port {port}")
+        serve(app, host='0.0.0.0', port=port, threads=4)
+    except Exception as e:
+        print(f"❌ Dashboard failed to start: {e}")
+        traceback.print_exc()
+        # Keep the process alive so Render doesn't restart
+        while True:
+            time.sleep(60)
 
 def main():
     print("=" * 50)
     print("🚀 Starting Siket Ekub Production Server")
     print("=" * 50)
     print(f"📅 Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"📂 Working directory: {os.getcwd()}")
+    print(f"🐍 Python version: {sys.version}")
     
     # Create required directories
     os.makedirs("logs", exist_ok=True)
@@ -69,12 +78,13 @@ def main():
         print("✅ Database initialized")
     except Exception as e:
         print(f"⚠️ Database initialization warning: {e}")
+        print("Continuing with existing database...")
     
-    # Start bot (even if it fails, dashboard will still run)
-    bot_thread = start_bot()
+    # Start bot in background thread (even if it fails, we continue)
+    start_bot()
     
-    # Give bot a moment to start
-    time.sleep(3)
+    # Give bot a moment to try starting
+    time.sleep(2)
     
     # ALWAYS start dashboard - this binds to the port
     print("🚀 Starting dashboard server...")
