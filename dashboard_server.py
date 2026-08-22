@@ -1,4 +1,4 @@
-# dashboard_server.py
+# dashboard_server.py - Updated with WebApp at root
 import csv
 import io
 import os
@@ -7,7 +7,7 @@ import sys
 import json
 import base64
 from datetime import datetime
-from flask import Flask, Response, jsonify, render_template, request, send_file, send_from_directory
+from flask import Flask, Response, jsonify, render_template, request, send_file, send_from_directory, redirect
 import pandas as pd
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -30,7 +30,6 @@ def get_db_connection():
         return None
 
 def row_to_dict(row):
-    """Convert sqlite3.Row to dict"""
     if row is None:
         return None
     return {key: row[key] for key in row.keys()}
@@ -58,15 +57,12 @@ def get_dashboard_metrics():
         conn = get_db_connection()
         if not conn:
             return get_empty_metrics()
-            
         cursor = conn.cursor()
 
-        # Total registered users
         cursor.execute("SELECT COUNT(*) as count FROM users")
         result = cursor.fetchone()
         total_members = result["count"] if result else 0
 
-        # Paid users
         cursor.execute("""
             SELECT COUNT(DISTINCT user_id) as count 
             FROM payments 
@@ -75,7 +71,6 @@ def get_dashboard_metrics():
         result = cursor.fetchone()
         paid_users = result["count"] if result else 0
 
-        # Unpaid users
         cursor.execute("""
             SELECT COUNT(*) as count 
             FROM users 
@@ -86,7 +81,6 @@ def get_dashboard_metrics():
         result = cursor.fetchone()
         unpaid_users = result["count"] if result else 0
 
-        # Total revenue
         cursor.execute("""
             SELECT COALESCE(SUM(extracted_amount), 0) as total 
             FROM payments 
@@ -95,7 +89,6 @@ def get_dashboard_metrics():
         result = cursor.fetchone()
         total_payment = result["total"] if result else 0.0
 
-        # Payment status counts
         cursor.execute("""
             SELECT status, COUNT(*) as count 
             FROM payments 
@@ -105,22 +98,18 @@ def get_dashboard_metrics():
         for row in cursor.fetchall():
             payment_status_counts[row["status"]] = row["count"]
 
-        # Tickets sold
         cursor.execute("SELECT COUNT(*) as count FROM tickets WHERE status = 'sold'")
         result = cursor.fetchone()
         tickets_sold = result["count"] if result else 0
 
-        # Tickets available
         cursor.execute("SELECT COUNT(*) as count FROM tickets WHERE status = 'available'")
         result = cursor.fetchone()
         tickets_available = result["count"] if result else 0
 
-        # Tickets refunded
         cursor.execute("SELECT COUNT(*) as count FROM tickets WHERE status = 'refunded'")
         result = cursor.fetchone()
         tickets_refunded = result["count"] if result else 0
 
-        # Recent payments
         cursor.execute("""
             SELECT p.payment_id, p.extracted_ref, u.telegram_id, u.phone_number, u.full_name,
                    p.extracted_amount, p.extracted_date, p.status, p.created_at,
@@ -133,7 +122,6 @@ def get_dashboard_metrics():
         """)
         recent_payments = [row_to_dict(row) for row in cursor.fetchall()]
 
-        # Members list
         cursor.execute("""
             SELECT 
                 u.user_id,
@@ -153,7 +141,6 @@ def get_dashboard_metrics():
         """)
         members_list = [row_to_dict(row) for row in cursor.fetchall()]
 
-        # Ticket buyers
         cursor.execute("""
             SELECT 
                 u.telegram_id,
@@ -171,7 +158,6 @@ def get_dashboard_metrics():
         """)
         ticket_buyers = [row_to_dict(row) for row in cursor.fetchall()]
 
-        # Daily statistics
         cursor.execute("""
             SELECT 
                 DATE(created_at) as date,
@@ -203,17 +189,32 @@ def get_dashboard_metrics():
             "db_exists": os.path.exists(DB_NAME),
             "last_updated": datetime.now().isoformat()
         }
-        
     except Exception as e:
         print(f"Error getting metrics: {e}")
         return get_empty_metrics()
 
 # =====================================================
-# FLASK ROUTES
+# FLASK ROUTES - WebApp at Root, Admin at /admin
 # =====================================================
 
-@app.route("/")
-def dashboard():
+@app.route('/')
+def serve_webapp():
+    """Serve the main WebApp at root URL"""
+    try:
+        return send_from_directory('.', 'index.html')
+    except Exception as e:
+        print(f"Error serving webapp: {e}")
+        return "WebApp not found", 404
+
+@app.route('/webapp')
+@app.route('/webapp/')
+def webapp_alt():
+    """Alternative webapp route"""
+    return send_from_directory('.', 'index.html')
+
+@app.route('/admin')
+def admin_dashboard():
+    """Serve the admin dashboard at /admin"""
     try:
         metrics = get_dashboard_metrics()
         return render_template(
@@ -230,19 +231,14 @@ def dashboard():
             error_message=str(e)
         )
 
-@app.route('/webapp')
-@app.route('/webapp/')
-@app.route('/app')
-@app.route('/app/')
-def serve_webapp():
-    """Serve the webapp"""
-    return send_from_directory('webapp', 'index.html')
+@app.route('/assets/<path:path>')
+def serve_assets(path):
+    """Serve static assets"""
+    return send_from_directory('assets', path)
 
-@app.route('/webapp/<path:path>')
-@app.route('/app/<path:path>')
-def serve_webapp_files(path):
-    """Serve webapp static files"""
-    return send_from_directory('webapp', path)
+# =====================================================
+# API ROUTES
+# =====================================================
 
 @app.route("/api/metrics", methods=["GET"])
 def api_metrics():
@@ -300,7 +296,6 @@ def export_report(report_type):
                 })
             df = pd.DataFrame(data)
             filename = f"members_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-            
         elif report_type == "tickets":
             data = []
             for buyer in metrics.get('ticket_buyers', []):
@@ -312,7 +307,6 @@ def export_report(report_type):
                 })
             df = pd.DataFrame(data)
             filename = f"ticket_buyers_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-            
         elif report_type == "financial":
             data = []
             for payment in metrics.get('recent_payments', []):
@@ -324,21 +318,18 @@ def export_report(report_type):
                 })
             df = pd.DataFrame(data)
             filename = f"financial_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-            
         else:
             return jsonify({"error": "Invalid report type. Use: members, tickets, or financial"}), 400
         
         output = io.BytesIO()
         df.to_excel(output, index=False, engine='openpyxl')
         output.seek(0)
-        
         return send_file(
             output,
             mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             as_attachment=True,
             download_name=filename
         )
-        
     except Exception as e:
         print(f"Export error: {e}")
         return jsonify({"error": str(e)}), 500
@@ -349,16 +340,13 @@ def export_report(report_type):
 
 @app.route('/api/payments/pending', methods=['GET'])
 def api_pending_payments():
-    """Get all pending payments with screenshot info"""
     try:
         conn = get_db_connection()
         if not conn:
             return jsonify({'error': 'Database connection failed'}), 500
         
         cursor = conn.cursor()
-        
         try:
-            # Try with screenshot_data column
             cursor.execute("""
                 SELECT p.payment_id, p.telegram_id, p.ticket_number, p.extracted_amount, 
                        p.created_at, p.status, u.full_name, u.phone_number,
@@ -371,7 +359,6 @@ def api_pending_payments():
             columns = [description[0] for description in cursor.description]
             payments = [dict(zip(columns, row)) for row in cursor.fetchall()]
         except sqlite3.OperationalError:
-            # If screenshot_data column doesn't exist, try without it
             cursor.execute("""
                 SELECT p.payment_id, p.telegram_id, p.ticket_number, p.extracted_amount, 
                        p.created_at, p.status, u.full_name, u.phone_number
@@ -392,7 +379,6 @@ def api_pending_payments():
 
 @app.route('/api/payments/<int:payment_id>/screenshot', methods=['GET'])
 def api_payment_screenshot(payment_id):
-    """Get payment screenshot"""
     try:
         conn = get_db_connection()
         if not conn:
@@ -421,7 +407,6 @@ def api_payment_screenshot(payment_id):
 
 @app.route('/api/payments/verify', methods=['POST'])
 def api_verify_payment():
-    """Verify a payment (admin)"""
     try:
         data = request.json
         payment_id = data.get('payment_id')
@@ -434,7 +419,6 @@ def api_verify_payment():
             return jsonify({'error': 'Database connection failed'}), 500
         
         cursor = conn.cursor()
-        
         cursor.execute("""
             UPDATE payments 
             SET status = ?, verified_by = ?, verified_at = CURRENT_TIMESTAMP, admin_notes = ?
