@@ -201,11 +201,9 @@ def get_dashboard_metrics():
 def serve_webapp():
     """Serve the main WebApp at root URL"""
     try:
-        # Try to send index.html from current directory
         return send_from_directory('.', 'index.html')
     except Exception as e:
         print(f"Error serving webapp: {e}")
-        # Fallback: list files in directory
         files = os.listdir('.')
         return f"WebApp not found. Files in directory: {files}. Error: {e}", 404
 
