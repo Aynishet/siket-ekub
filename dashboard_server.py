@@ -208,11 +208,17 @@ def get_dashboard_metrics():
         return get_empty_metrics()
 
 # =====================================================
-# FLASK ROUTES
+# FLASK ROUTES - UPDATED
 # =====================================================
 
-@app.route("/")
-def dashboard():
+@app.route('/')
+def serve_webapp():
+    """Serve the main webapp for users at root URL"""
+    return send_from_directory('webapp', 'index.html')
+
+@app.route('/admin')
+def admin_dashboard():
+    """Serve the admin dashboard at /admin"""
     try:
         metrics = get_dashboard_metrics()
         return render_template(
@@ -233,8 +239,8 @@ def dashboard():
 @app.route('/webapp/')
 @app.route('/app')
 @app.route('/app/')
-def serve_webapp():
-    """Serve the webapp"""
+def serve_webapp_alt():
+    """Serve the webapp from alternative paths"""
     return send_from_directory('webapp', 'index.html')
 
 @app.route('/webapp/<path:path>')
@@ -345,7 +351,9 @@ def export_report(report_type):
 application = app
 
 def start_dashboard():
-    print("📊 Starting Admin Dashboard Server...")
+    print("📊 Starting Siket Ekub Server...")
+    print(f"   WebApp: https://your-domain.com/")
+    print(f"   Admin Dashboard: https://your-domain.com/admin")
     app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)
 
 if __name__ == "__main__":
