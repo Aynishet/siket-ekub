@@ -1,6 +1,6 @@
 # =====================================================
 # BOT.PY - SIKET EKUB LOTTERY BOT
-# Complete Production Bot with OCR & Duplicate Check
+# No OCR - Manual Payment Verification Only
 # =====================================================
 
 import sys
@@ -11,16 +11,15 @@ import threading
 import random
 import re
 import io
-import cv2
-import numpy as np
-import pandas as pd
 import ssl
-import easyocr
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from queue import Queue
 from threading import Lock
 from logging.handlers import RotatingFileHandler
+
+# Remove: import cv2, numpy, easyocr
+# These are no longer needed
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.filters import Command
@@ -36,6 +35,10 @@ from aiogram.types import (
 import aiosqlite
 from dotenv import load_dotenv
 from database import init_db, backup_database, DB_NAME, process_refund
+
+# OCR disabled
+OCR_AVAILABLE = False
+reader = None
 
 # =====================================================
 # FIX: Windows Encoding
