@@ -4,7 +4,6 @@ import sys
 import time
 import threading
 import asyncio
-import signal
 import traceback
 from datetime import datetime
 
@@ -21,23 +20,19 @@ def start_bot():
     def run_bot():
         global bot_is_ready
         try:
-            # Import here to avoid circular imports
             from bot import main
             print("✅ Bot module imported, running main()...")
             asyncio.run(main())
             bot_is_ready = True
             print("✅ Bot main() completed successfully")
         except Exception as e:
-            # Print to console for Render logs
             print("=" * 60)
             print("❌❌❌ BOT CRASHED ❌❌❌")
             print("=" * 60)
             print(f"Error: {e}")
-            print("\nFull traceback:")
             traceback.print_exc()
             print("=" * 60)
             
-            # Also write to a file for debugging
             os.makedirs("logs", exist_ok=True)
             with open("logs/bot_crash.log", "w") as f:
                 f.write(f"Time: {datetime.now().isoformat()}\n")
@@ -45,7 +40,6 @@ def start_bot():
                 traceback.print_exc(file=f)
             bot_is_ready = False
     
-    # Create and start the thread
     bot_thread = threading.Thread(target=run_bot, daemon=True)
     bot_thread.start()
     print("✅ Bot thread started!")
@@ -56,7 +50,8 @@ def start_dashboard():
     print("🌐 Starting Dashboard...")
     from dashboard_server import app
     from waitress import serve
-    # Use the PORT environment variable (Render default is 10000)
+    
+    # IMPORTANT: Use PORT environment variable (Render default is 10000)
     port = int(os.environ.get('PORT', 10000))
     print(f"📡 Dashboard binding to port {port}")
     serve(app, host='0.0.0.0', port=port, threads=4)
@@ -97,7 +92,7 @@ def main():
         print("⚠️ Bot may not have started correctly. Check logs above for errors.")
         print("   The dashboard will still run, but bot commands won't work.")
     
-    # Start dashboard (this blocks)
+    # Start dashboard (this blocks and binds to the port)
     print("🚀 Starting dashboard server...")
     try:
         start_dashboard()
