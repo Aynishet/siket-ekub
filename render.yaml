@@ -20,10 +20,8 @@ services:
         value: 3.12.0
       
       # ====== DATABASE ======
-      - key: DATABASE_NAME
-        value: siket_ekub.db
-      - key: DEBUG
-        value: True
+      - key: DATABASE_URL
+        value: postgresql://...  # ← Your Render PostgreSQL URL
       
       # ====== WEBAPP URL ======
       - key: WEBAPP_URL
