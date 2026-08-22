@@ -927,6 +927,7 @@
       }
     }
 
+    // ✅ FIXED: registerUser uses /user/create with correct field names
     async function registerUser() {
       const phone = document.getElementById('regPhone').value.trim();
       const address = document.getElementById('regAddress').value.trim();
@@ -943,7 +944,6 @@
         return; 
       }
       
-      // ✅ FIXED: Use correct field names for /user/create
       const result = await apiCall('/user/create', 'POST', { 
         telegram_id: currentUser.id, 
         phone_number: phone, 
@@ -1280,7 +1280,6 @@
         });
       }
       
-      // ✅ FIXED: Use /payments/create instead of /submit_payment
       const result = await apiCall('/payments/create', 'POST', { 
         telegram_id: currentUser.id, 
         ticket_id: ticketObj.ticket_id, 
