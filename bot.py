@@ -1,6 +1,7 @@
 # =====================================================
 # BOT.PY - SIKET EKUB LOTTERY BOT
 # Complete Production Bot - NO OCR (Manual Verification Only)
+# Fixed for Render Deployment
 # =====================================================
 
 import sys
@@ -12,11 +13,42 @@ import random
 import re
 import io
 import ssl
+import signal
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from queue import Queue
 from threading import Lock
 from logging.handlers import RotatingFileHandler
+
+# =====================================================
+# FIX: Prevent signal handler errors
+# =====================================================
+
+_original_add_signal_handler = None
+
+def patch_signal_handlers():
+    """Patch signal handlers to work in background threads"""
+    global _original_add_signal_handler
+    
+    try:
+        loop = asyncio.get_running_loop()
+        
+        if _original_add_signal_handler is None:
+            _original_add_signal_handler = loop.add_signal_handler
+        
+        def patched_add_signal_handler(sig, callback, *args, **kwargs):
+            try:
+                return _original_add_signal_handler(sig, callback, *args, **kwargs)
+            except (RuntimeError, ValueError) as e:
+                if "set_wakeup_fd only works in main thread" in str(e):
+                    print(f"⚠️ Ignoring signal handler for signal {sig} (background thread)")
+                    return None
+                raise
+        
+        loop.add_signal_handler = patched_add_signal_handler
+    except RuntimeError:
+        # No running loop yet
+        pass
 
 # =====================================================
 # NO OCR - REMOVED: cv2, numpy, easyocr
@@ -827,17 +859,78 @@ async def cmd_start(message: Message, state: FSMContext):
     if user:
         lang = user[8] if len(user) > 8 else "en"
         shared_state.set_language(uid, lang)
+        
+        # =====================================================
+        # GIVE USER CHOICE: Telegram or Web Interface
+        # =====================================================
+        webapp_url = os.getenv("WEBAPP_URL", "https://siket-ekub-webapp.onrender.com")
+        
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(
+                text="🤖 Use Telegram Bot",
+                callback_data="interface_telegram"
+            )],
+            [InlineKeyboardButton(
+                text="🌐 Use Web Interface",
+                web_app=WebAppInfo(url=f"{webapp_url}")
+            )],
+            [InlineKeyboardButton(
+                text="ℹ️ About",
+                callback_data="about"
+            )]
+        ])
+        
         await message.answer(
-            Localization.get_text(uid, "welcome"),
-            reply_markup=KeyboardBuilder.main_menu(uid)
+            f"🎰 Welcome back, {user[4] or 'User'}!\n\n"
+            f"Choose how you want to use Siket Ekub:\n\n"
+            f"🤖 **Telegram Bot** - Use menus in Telegram\n"
+            f"🌐 **Web Interface** - Open in your browser\n\n"
+            f"Both interfaces share the same account and tickets!",
+            reply_markup=kb,
+            parse_mode="Markdown"
         )
         return
     
+    # New user registration
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="English 🇬🇧", callback_data="set_lang_en_first")],
         [InlineKeyboardButton(text="አማርኛ 🇪🇹", callback_data="set_lang_am_first")]
     ])
     await message.answer(Localization.get_text(uid, "lang_prompt"), reply_markup=kb)
+
+@router.callback_query(F.data == "interface_telegram")
+async def interface_telegram(callback: CallbackQuery):
+    """User chose Telegram interface"""
+    uid = callback.from_user.id
+    await callback.message.edit_text(
+        Localization.get_text(uid, "welcome"),
+        reply_markup=KeyboardBuilder.main_menu(uid)
+    )
+    await callback.answer("✅ Using Telegram interface")
+
+@router.callback_query(F.data == "about")
+async def about(callback: CallbackQuery):
+    """Show about info"""
+    uid = callback.from_user.id
+    await callback.message.edit_text(
+        "🎰 **Siket Ekub Lottery**\n\n"
+        "Ticket Price: 3,000 ETB\n\n"
+        "🏆 **10 Grand Prizes:**\n"
+        "1st: BWD Leopard 3 (8,000,000 ETB)\n"
+        "2nd: Hyundai Bayon (5,000,000 ETB)\n"
+        "3rd: Shop Space (4,000,000 ETB)\n"
+        "4th-7th: 1,000,000 ETB Cash each\n"
+        "8th: 500,000 ETB Cash\n"
+        "9th: 300,000 ETB Cash\n"
+        "10th: 200,000 ETB Cash\n\n"
+        "📌 Register > Pick Ticket > Pay 3,000 ETB > Win!\n\n"
+        "🚀 GOOD LUCK!",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 Back", callback_data="main_menu_callback")]
+        ]),
+        parse_mode="Markdown"
+    )
+    await callback.answer()
 
 @router.callback_query(F.data.startswith("set_lang_"))
 async def process_language_first(callback: CallbackQuery, state: FSMContext):
@@ -1673,8 +1766,9 @@ async def reject_payment(callback: CallbackQuery):
     )
 
 # =====================================================
-# REST OF YOUR CODE - KEEP EVERYTHING BELOW AS IS
+# THE REST OF YOUR CODE - KEEP EVERYTHING BELOW AS IS
 # =====================================================
+
 # All your existing code for:
 # - ADMIN: USER MANAGEMENT (add_user, delete_user, list_users)
 # - ADMIN: BUY TICKET FOR USER
@@ -1693,10 +1787,11 @@ async def reject_payment(callback: CallbackQuery):
 # - MAIN FUNCTION
 
 # =====================================================
-# MAIN FUNCTION
+# MAIN FUNCTION - FIXED FOR RENDER
 # =====================================================
+
 async def main():
-    """Main entry point for the bot"""
+    """Main entry point for the bot - Fixed for Render deployment"""
     print("=" * 50)
     print("🚀 Initializing Siket Ekub Bot...")
     print("=" * 50)
@@ -1704,19 +1799,27 @@ async def main():
     print(f"🎟️ Ticket Channel: {TICKET_CHANNEL_LINK}")
     print(f"👤 Admins: {ADMIN_IDS}")
     
+    # Patch signal handlers to work in any thread
+    patch_signal_handlers()
+    
     try:
         await init_db()
         print("✅ Database initialized")
+        
         await start_background_tasks()
         print("✅ Background tasks started")
+        
         await set_bot_commands(bot)
         print("✅ Bot commands set")
+        
         dp.include_router(router)
         await bot.delete_webhook(drop_pending_updates=True)
+        
         print("✅ Webhook cleared, starting polling...")
         print("🤖 Bot is running and ready!")
         print("   Press Ctrl+C to stop")
         print("=" * 50)
+        
         await dp.start_polling(bot)
         
     except Exception as e:
