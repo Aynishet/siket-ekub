@@ -3184,31 +3184,61 @@ async def admin_create_game_slots(message: Message, state: FSMContext):
 # =====================================================
 # MAIN FUNCTION
 # =====================================================
+# bot.py - At the very end
+
 async def main():
+    """Main entry point for the bot"""
     print("=" * 50)
-    print("🚀 Initializing Siket Ekub System...")
+    print("🚀 Initializing Siket Ekub Bot...")
     print("=" * 50)
     print(f"📞 Support Channel: {SUPPORT_CHANNEL_LINK}")
     print(f"🎟️ Ticket Channel: {TICKET_CHANNEL_LINK}")
+    print(f"👤 Admins: {ADMIN_IDS}")
     
-    await init_db()
-    await start_background_tasks()
-    await set_bot_commands(bot)
-    
-    dp.include_router(router)
-    await bot.delete_webhook(drop_pending_updates=True)
-    
-    print("🤖 Bot running with multi-threading...")
-    print(f"   Workers: {ThreadPools.CPU._max_workers} CPU, "
-          f"{ThreadPools.IO._max_workers} IO, "
-          f"{ThreadPools.OCR._max_workers} OCR")
-    
-    await dp.start_polling(bot)
+    try:
+        # Initialize database
+        await init_db()
+        print("✅ Database initialized")
+        
+        # Start background tasks
+        await start_background_tasks()
+        print("✅ Background tasks started")
+        
+        # Set bot commands
+        await set_bot_commands(bot)
+        print("✅ Bot commands set")
+        
+        # Include router
+        dp.include_router(router)
+        
+        # Delete webhook and start polling
+        await bot.delete_webhook(drop_pending_updates=True)
+        print("✅ Webhook cleared, starting polling...")
+        
+        print("🤖 Bot is running and ready!")
+        print("   Press Ctrl+C to stop")
+        print("=" * 50)
+        
+        # Start polling
+        await dp.start_polling(bot)
+        
+    except Exception as e:
+        print(f"❌ Bot error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
+    finally:
+        # Cleanup
+        print("🔄 Cleaning up...")
+        ThreadPools.shutdown_all()
+        print("✅ Cleanup complete")
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
-    except (KeyboardInterrupt, SystemExit):
-        print("🛑 Shutting down...")
-        ThreadPools.shutdown_all()
-        print("✅ Cleanup complete")
+    except KeyboardInterrupt:
+        print("\n🛑 Bot stopped by user")
+    except Exception as e:
+        print(f"❌ Fatal error: {e}")
+        import traceback
+        traceback.print_exc()
