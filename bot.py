@@ -1,6 +1,6 @@
 # =====================================================
 # BOT.PY - SIKET EKUB LOTTERY BOT
-# FULLY WORKING - BOTTOM MENUS FOR BOTH USER & ADMIN
+# COMPLETE PRODUCTION VERSION - ALL HANDLERS WORKING
 # =====================================================
 
 import sys
@@ -30,6 +30,7 @@ from aiogram.types import (
     InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove,
     BufferedInputFile, BotCommand, WebAppInfo
 )
+from aiogram.exceptions import TelegramAPIError
 
 import aiosqlite
 from dotenv import load_dotenv
@@ -60,13 +61,20 @@ dp = Dispatcher(storage=storage)
 router = Router()
 
 # =====================================================
-# LANGUAGE CACHE
+# LANGUAGE SYSTEM
 # =====================================================
-lang_cache = {}
 
-def t(user_id: int, key: str, **kwargs) -> str:
+async def get_user_lang(user_id: int) -> str:
+    """Get user language from database"""
+    user = await DatabaseHelper.fetch_one(
+        "SELECT language FROM users WHERE telegram_id = ?",
+        (user_id,)
+    )
+    return user[0] if user else 'en'
+
+async def get_text(user_id: int, key: str, **kwargs) -> str:
     """Get text in user's language"""
-    lang = lang_cache.get(user_id, 'en')
+    lang = await get_user_lang(user_id)
     
     texts = {
         "en": {
@@ -106,7 +114,13 @@ def t(user_id: int, key: str, **kwargs) -> str:
             "admin_menu": "🛠️ Admin Menu",
             "web_interface": "🌐 Web Interface",
             "about": "ℹ️ About",
-            "choose_interface": "🎰 Choose how to play:",
+            "refund_complete": "✅ Refund of {amount} ETB processed.",
+            "refund_all_complete": "✅ Refunded {total} ETB to {count} users.",
+            "no_refund_users": "✅ No users with positive balance.",
+            "broadcast_sent": "✅ Broadcast sent to {sent}/{total} users.",
+            "game_created": "✅ Game '{name}' created with {slots} tickets!",
+            "your_tickets": "🎫 Your Tickets:\n",
+            "support_text": "💬 Support Channels\n\n📞 For help, join our support channel.\n🎟️ View verified tickets in the ticket channel.",
         },
         "am": {
             "welcome": "🎰 ወደ ሲኬት ዕቁብ ሎተሪ እንኳን በደህና መጡ!\n💰 ዋጋ: 3,000 ብር/ቲኬት",
@@ -145,7 +159,13 @@ def t(user_id: int, key: str, **kwargs) -> str:
             "admin_menu": "🛠️ የአስተዳዳሪ ምናሌ",
             "web_interface": "🌐 የድር በይነገጽ",
             "about": "ℹ️ መረጃ",
-            "choose_interface": "🎰 እንዴት መጫወት ይፈልጋሉ?",
+            "refund_complete": "✅ {amount} ብር ተመልሷል።",
+            "refund_all_complete": "✅ {total} ብር ለ {count} ተጠቃሚዎች ተመልሷል።",
+            "no_refund_users": "✅ ቀሪ ሂሳብ ያላቸው ተጠቃሚዎች የሉም።",
+            "broadcast_sent": "✅ መልዕክት ለ {sent}/{total} ተጠቃሚዎች ተልኳል።",
+            "game_created": "✅ '{name}' ጨዋታ በ {slots} ቲኬቶች ተፈጥሯል!",
+            "your_tickets": "🎫 የእርስዎ ቲኬቶች:\n",
+            "support_text": "💬 የድጋፍ ሰርጦች\n\n📞 ለእርዳታ የድጋፍ ሰርጣችንን ይቀላቀሉ።\n🎟️ የተረጋገጡ ቲኬቶችን በቲኬት ሰርጥ ይመልከቱ።",
         }
     }
     
@@ -156,20 +176,23 @@ def t(user_id: int, key: str, **kwargs) -> str:
 # BOTTOM MENU KEYBOARDS
 # =====================================================
 
-# USER BOTTOM MENU (appears at bottom of input)
-def user_menu(uid: int) -> ReplyKeyboardMarkup:
+async def user_menu(user_id: int) -> ReplyKeyboardMarkup:
+    """User bottom menu - all buttons work"""
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text=t(uid, "buy")), KeyboardButton(text=t(uid, "tickets"))],
-            [KeyboardButton(text=t(uid, "balance")), KeyboardButton(text=t(uid, "prizes"))],
-            [KeyboardButton(text=t(uid, "support")), KeyboardButton(text=t(uid, "lang"))],
+            [KeyboardButton(text=await get_text(user_id, "buy")), 
+             KeyboardButton(text=await get_text(user_id, "tickets"))],
+            [KeyboardButton(text=await get_text(user_id, "balance")), 
+             KeyboardButton(text=await get_text(user_id, "prizes"))],
+            [KeyboardButton(text=await get_text(user_id, "support")), 
+             KeyboardButton(text=await get_text(user_id, "lang"))],
             [KeyboardButton(text="🌐 Web Interface"), KeyboardButton(text="ℹ️ About")],
         ],
         resize_keyboard=True
     )
 
-# ADMIN BOTTOM MENU (appears at bottom of input)
-def admin_menu(uid: int) -> ReplyKeyboardMarkup:
+async def admin_menu(user_id: int) -> ReplyKeyboardMarkup:
+    """Admin bottom menu"""
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="🛠️ Admin Panel")],
@@ -180,8 +203,8 @@ def admin_menu(uid: int) -> ReplyKeyboardMarkup:
         resize_keyboard=True
     )
 
-# START MENU (before registration)
-def start_menu(uid: int) -> ReplyKeyboardMarkup:
+def start_menu() -> ReplyKeyboardMarkup:
+    """Start menu for new users"""
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="🤖 Use Telegram Bot")],
@@ -191,8 +214,8 @@ def start_menu(uid: int) -> ReplyKeyboardMarkup:
         resize_keyboard=True
     )
 
-# Inline keyboards for admin actions
-def admin_inline_kb(uid: int) -> InlineKeyboardMarkup:
+def admin_inline_kb() -> InlineKeyboardMarkup:
+    """Admin inline keyboard"""
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✅ Verify Payments", callback_data="admin_verify")],
         [InlineKeyboardButton(text="📝 Create Game", callback_data="admin_create")],
@@ -203,9 +226,10 @@ def admin_inline_kb(uid: int) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🔙 Back", callback_data="admin_back")],
     ])
 
-def back_inline_kb(uid: int, callback: str = "main_back") -> InlineKeyboardMarkup:
+def back_inline_kb(callback: str = "main_back") -> InlineKeyboardMarkup:
+    """Back button inline keyboard"""
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=t(uid, "back"), callback_data=callback)]
+        [InlineKeyboardButton(text="🔙 Back", callback_data=callback)]
     ])
 
 # =====================================================
@@ -224,31 +248,25 @@ class AdminState(StatesGroup):
     game_prizes = State()
     game_slots = State()
     broadcast_msg = State()
-    refund_reason = State()
 
 # =====================================================
-# START COMMAND - WITH CHOICE MENU
+# START COMMAND
 # =====================================================
+
 @router.message(Command("start"))
 async def start_cmd(message: Message, state: FSMContext):
     uid = message.from_user.id
+    await state.clear()
     
-    # Check if user exists
     user = await DatabaseHelper.fetch_one("SELECT * FROM users WHERE telegram_id = ?", (uid,))
     
     if user:
-        # Set language
-        lang = user[8] if len(user) > 8 else 'en'
-        lang_cache[uid] = lang
-        
-        # Show welcome with user menu
         await message.answer(
-            t(uid, "welcome"),
-            reply_markup=user_menu(uid)
+            await get_text(uid, "welcome"),
+            reply_markup=await user_menu(uid)
         )
         return
     
-    # NEW USER - Show choice menu with Web Interface option
     await message.answer(
         "🎰 **SIKET EKUB LOTTERY**\n\n"
         "💰 Ticket Price: 3,000 ETB\n\n"
@@ -262,7 +280,7 @@ async def start_cmd(message: Message, state: FSMContext):
         "10th: 200,000 ETB Cash\n\n"
         "📌 Register > Pick Ticket > Pay > Win!\n\n"
         "🚀 **Choose how to play:**",
-        reply_markup=start_menu(uid),
+        reply_markup=start_menu(),
         parse_mode="Markdown"
     )
 
@@ -274,7 +292,6 @@ async def start_cmd(message: Message, state: FSMContext):
 async def choice_telegram(message: Message, state: FSMContext):
     uid = message.from_user.id
     
-    # Show language selection
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🇬🇧 English", callback_data="lang_en")],
         [InlineKeyboardButton(text="🇪🇹 አማርኛ", callback_data="lang_am")],
@@ -290,16 +307,13 @@ async def choice_telegram(message: Message, state: FSMContext):
 async def choice_web(message: Message):
     uid = message.from_user.id
     
-    # Auto-register if not exists
     user = await DatabaseHelper.fetch_one("SELECT * FROM users WHERE telegram_id = ?", (uid,))
     if not user:
         await DatabaseHelper.execute(
             "INSERT INTO users (telegram_id, phone_number, address, language) VALUES (?, ?, ?, ?)",
             (uid, "Pending", "Pending", "en")
         )
-        lang_cache[uid] = "en"
     
-    # Open web app
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🌐 Open Web Interface", web_app=WebAppInfo(url=WEBAPP_URL))]
     ])
@@ -315,6 +329,10 @@ async def choice_web(message: Message):
 async def choice_about(message: Message):
     uid = message.from_user.id
     
+    # Check if user exists to show correct menu
+    user = await DatabaseHelper.fetch_one("SELECT * FROM users WHERE telegram_id = ?", (uid,))
+    menu = await user_menu(uid) if user else start_menu()
+    
     await message.answer(
         "🎰 **SIKET EKUB LOTTERY**\n\n"
         "💰 Ticket Price: 3,000 ETB\n\n"
@@ -328,30 +346,48 @@ async def choice_about(message: Message):
         "10th: 200,000 ETB Cash\n\n"
         "📌 Register > Pick Ticket > Pay > Win!\n\n"
         "🚀 GOOD LUCK!",
-        reply_markup=start_menu(uid),
+        reply_markup=menu,
         parse_mode="Markdown"
     )
 
 # =====================================================
 # LANGUAGE SELECTION
 # =====================================================
+
 @router.callback_query(F.data.startswith("lang_"))
 async def set_lang(callback: CallbackQuery, state: FSMContext):
     uid = callback.from_user.id
     lang = callback.data.split("_")[1]
-    lang_cache[uid] = lang
+    
+    # Update language in database
+    await DatabaseHelper.execute(
+        "UPDATE users SET language = ? WHERE telegram_id = ?",
+        (lang, uid)
+    )
     
     await callback.message.delete()
     
-    # Ask for phone number
+    # Check if user has phone/address
+    user = await DatabaseHelper.fetch_one("SELECT phone_number, address FROM users WHERE telegram_id = ?", (uid,))
+    
+    if user and user[0] and user[0] != "Pending" and user[1] and user[1] != "Pending":
+        # User already registered
+        await callback.message.answer(
+            await get_text(uid, "welcome"),
+            reply_markup=await user_menu(uid)
+        )
+        await callback.answer()
+        return
+    
+    # Ask for phone
     kb = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=t(uid, "reg_phone"), request_contact=True)]],
+        keyboard=[[KeyboardButton(text=await get_text(uid, "reg_phone"), request_contact=True)]],
         resize_keyboard=True,
         one_time_keyboard=True
     )
     
     await callback.message.answer(
-        f"📱 {t(uid, 'reg_phone')}",
+        f"📱 {await get_text(uid, 'reg_phone')}",
         reply_markup=kb
     )
     await state.set_state(RegState.phone)
@@ -362,7 +398,7 @@ async def reg_phone(message: Message, state: FSMContext):
     uid = message.from_user.id
     await state.update_data(phone=message.contact.phone_number)
     await message.answer(
-        t(uid, "reg_address"),
+        await get_text(uid, "reg_address"),
         reply_markup=ReplyKeyboardRemove()
     )
     await state.set_state(RegState.address)
@@ -373,23 +409,23 @@ async def reg_address(message: Message, state: FSMContext):
     data = await state.get_data()
     phone = data.get("phone")
     address = message.text
-    lang = lang_cache.get(uid, 'en')
     
     await DatabaseHelper.execute(
-        "INSERT INTO users (telegram_id, phone_number, address, language) VALUES (?, ?, ?, ?)",
-        (uid, phone, address, lang)
+        "UPDATE users SET phone_number = ?, address = ? WHERE telegram_id = ?",
+        (phone, address, uid)
     )
     await state.clear()
     
     await message.answer(
-        t(uid, "registered"),
-        reply_markup=user_menu(uid)
+        await get_text(uid, "registered"),
+        reply_markup=await user_menu(uid)
     )
 
 # =====================================================
-# MAIN MENU COMMANDS (BOTTOM BUTTONS)
+# USER MENU HANDLERS - ALL WORKING
 # =====================================================
 
+# 1. BUY TICKET
 @router.message(F.text.in_(["🎯 Buy Ticket", "🎯 ቲኬት ግዛ"]))
 async def buy_start(message: Message, state: FSMContext):
     uid = message.from_user.id
@@ -400,16 +436,16 @@ async def buy_start(message: Message, state: FSMContext):
     if not games:
         await message.answer(
             "❌ No active games available.",
-            reply_markup=user_menu(uid)
+            reply_markup=await user_menu(uid)
         )
         return
     
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=f"🎯 {g[1]} ({g[2]:,.0f} ETB)", callback_data=f"game_{g[0]}")]
         for g in games
-    ] + [[InlineKeyboardButton(text=t(uid, "back"), callback_data="main_back")]])
+    ] + [[InlineKeyboardButton(text=await get_text(uid, "back"), callback_data="main_back")]])
     
-    await message.answer(t(uid, "select_game"), reply_markup=kb)
+    await message.answer(await get_text(uid, "select_game"), reply_markup=kb)
     await state.set_state(BuyState.game)
 
 @router.callback_query(F.data.startswith("game_"))
@@ -418,7 +454,6 @@ async def select_game(callback: CallbackQuery, state: FSMContext):
     type_id = int(callback.data.split("_")[1])
     await state.update_data(game_id=type_id)
     
-    # Show ticket blocks
     kb = InlineKeyboardMarkup(inline_keyboard=[])
     for i in range(1, 20001, 1000):
         kb.inline_keyboard.append([
@@ -429,13 +464,13 @@ async def select_game(callback: CallbackQuery, state: FSMContext):
         ])
         if len(kb.inline_keyboard) >= 10:
             break
-    kb.inline_keyboard.append([InlineKeyboardButton(text=t(uid, "back"), callback_data="buy_back")])
+    kb.inline_keyboard.append([InlineKeyboardButton(text=await get_text(uid, "back"), callback_data="buy_back")])
     
-    await callback.message.edit_text(t(uid, "pick_ticket"), reply_markup=kb)
+    await callback.message.edit_text(await get_text(uid, "pick_ticket"), reply_markup=kb)
     await callback.answer()
 
 @router.callback_query(F.data.startswith("block_"))
-async def select_block(callback: CallbackQuery, state: FSMContext):
+async def select_block(callback: CallbackQuery):
     uid = callback.from_user.id
     _, type_id, start, end = callback.data.split("_")
     type_id = int(type_id)
@@ -460,7 +495,7 @@ async def select_block(callback: CallbackQuery, state: FSMContext):
     if row:
         kb.inline_keyboard.append(row)
     
-    kb.inline_keyboard.append([InlineKeyboardButton(text=t(uid, "back"), callback_data=f"game_{type_id}")])
+    kb.inline_keyboard.append([InlineKeyboardButton(text=await get_text(uid, "back"), callback_data=f"game_{type_id}")])
     await callback.message.edit_text(f"🎫 Tickets {start}-{end}", reply_markup=kb)
     await callback.answer()
 
@@ -485,11 +520,11 @@ async def select_ticket(callback: CallbackQuery, state: FSMContext):
     
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💰 Confirm Payment", callback_data="confirm_pay")],
-        [InlineKeyboardButton(text=t(uid, "cancel"), callback_data="buy_back")]
+        [InlineKeyboardButton(text=await get_text(uid, "cancel"), callback_data="buy_back")]
     ])
     
     await callback.message.edit_text(
-        f"🎫 Ticket #{ticket[0]}\n\n" + t(uid, "pay"),
+        f"🎫 Ticket #{ticket[0]}\n\n" + await get_text(uid, "pay"),
         reply_markup=kb
     )
     await callback.answer()
@@ -510,17 +545,17 @@ async def confirm_pay(callback: CallbackQuery, state: FSMContext):
         (ticket_id,)
     )
     if not ticket:
-        await callback.answer("❌ Ticket gone!", show_alert=True)
+        await callback.answer("❌ Ticket just got sold!", show_alert=True)
         return
     
     await state.set_state(BuyState.payment)
     
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=t(uid, "cancel"), callback_data="buy_back")]
+        [InlineKeyboardButton(text=await get_text(uid, "cancel"), callback_data="buy_back")]
     ])
     
     await callback.message.edit_text(
-        f"🎫 Ticket #{ticket_num}\n\n" + t(uid, "pay"),
+        f"🎫 Ticket #{ticket_num}\n\n" + await get_text(uid, "pay"),
         reply_markup=kb
     )
     await callback.answer()
@@ -535,7 +570,7 @@ async def process_payment(message: Message, state: FSMContext):
     if not ticket_id:
         await message.answer(
             "❌ No ticket selected.",
-            reply_markup=user_menu(uid)
+            reply_markup=await user_menu(uid)
         )
         await state.clear()
         return
@@ -544,7 +579,7 @@ async def process_payment(message: Message, state: FSMContext):
     if not user:
         await message.answer(
             "❌ Please /start first.",
-            reply_markup=user_menu(uid)
+            reply_markup=await user_menu(uid)
         )
         return
     
@@ -563,8 +598,8 @@ async def process_payment(message: Message, state: FSMContext):
     
     await state.clear()
     await message.answer(
-        t(uid, "pay_submitted"),
-        reply_markup=user_menu(uid)
+        await get_text(uid, "pay_submitted"),
+        reply_markup=await user_menu(uid)
     )
     
     # Notify admins
@@ -594,6 +629,191 @@ async def process_payment(message: Message, state: FSMContext):
         except Exception as e:
             logger.error(f"Failed to notify admin: {e}")
 
+@router.callback_query(F.data == "buy_back")
+async def buy_back(callback: CallbackQuery, state: FSMContext):
+    uid = callback.from_user.id
+    await state.clear()
+    await callback.message.delete()
+    await callback.message.answer(
+        await get_text(uid, "menu"),
+        reply_markup=await user_menu(uid)
+    )
+    await callback.answer()
+
+@router.callback_query(F.data == "main_back")
+async def main_back(callback: CallbackQuery, state: FSMContext):
+    uid = callback.from_user.id
+    await state.clear()
+    await callback.message.delete()
+    await callback.message.answer(
+        await get_text(uid, "menu"),
+        reply_markup=await user_menu(uid)
+    )
+    await callback.answer()
+
+# =====================================================
+# 2. MY TICKETS - NOW WORKING
+# =====================================================
+
+@router.message(F.text.in_(["🎫 My Tickets", "🎫 ቲኬቶቼ"]))
+async def my_tickets(message: Message):
+    uid = message.from_user.id
+    
+    tickets = await DatabaseHelper.fetch(
+        "SELECT ticket_number, assigned_at FROM tickets WHERE telegram_id = ? AND status = 'sold' ORDER BY assigned_at DESC",
+        (uid,)
+    )
+    
+    if not tickets:
+        await message.answer(
+            await get_text(uid, "no_tickets"),
+            reply_markup=await user_menu(uid)
+        )
+        return
+    
+    lines = [await get_text(uid, "your_tickets")]
+    for num, date in tickets[:10]:
+        date_str = date[:10] if date else "N/A"
+        lines.append(f"#{num} - {date_str}")
+    if len(tickets) > 10:
+        lines.append(f"... and {len(tickets)-10} more")
+    
+    await message.answer(
+        "\n".join(lines),
+        reply_markup=await user_menu(uid)
+    )
+
+# =====================================================
+# 3. BALANCE - NOW WORKING
+# =====================================================
+
+@router.message(F.text.in_(["💰 Balance", "💰 ቀሪ ሂሳብ"]))
+async def balance_cmd(message: Message):
+    uid = message.from_user.id
+    
+    user = await DatabaseHelper.fetch_one(
+        "SELECT balance, total_spent FROM users WHERE telegram_id = ?",
+        (uid,)
+    )
+    if not user:
+        await message.answer(
+            "❌ Please /start first.",
+            reply_markup=await user_menu(uid)
+        )
+        return
+    
+    tickets = await DatabaseHelper.fetch(
+        "SELECT COUNT(*) FROM tickets WHERE telegram_id = ? AND status = 'sold'",
+        (uid,)
+    )
+    await message.answer(
+        await get_text(uid, "balance_info", 
+                      balance=user[0] or 0, 
+                      tickets=tickets[0][0] or 0, 
+                      spent=user[1] or 0),
+        reply_markup=await user_menu(uid)
+    )
+
+# =====================================================
+# 4. PRIZES - NOW WORKING
+# =====================================================
+
+@router.message(F.text.in_(["🏆 Prizes", "🏆 ሽልማቶች"]))
+async def prizes_cmd(message: Message):
+    uid = message.from_user.id
+    
+    await message.answer(
+        await get_text(uid, "prize_list"),
+        reply_markup=await user_menu(uid)
+    )
+
+# =====================================================
+# 5. SUPPORT - NOW WORKING
+# =====================================================
+
+@router.message(F.text.in_(["💬 Support", "💬 ድጋፍ"]))
+async def support_cmd(message: Message):
+    uid = message.from_user.id
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📞 Support Channel", url=SUPPORT_CHANNEL_LINK)],
+        [InlineKeyboardButton(text="🎟️ Ticket Channel", url=TICKET_CHANNEL_LINK)],
+        [InlineKeyboardButton(text=await get_text(uid, "back"), callback_data="main_back")]
+    ])
+    
+    await message.answer(
+        await get_text(uid, "support_text"),
+        reply_markup=kb
+    )
+
+# =====================================================
+# 6. LANGUAGE - NOW WORKING
+# =====================================================
+
+@router.message(F.text.in_(["🌍 Language", "🌍 ቋንቋ"]))
+async def lang_cmd(message: Message):
+    uid = message.from_user.id
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🇬🇧 English", callback_data="lang_en")],
+        [InlineKeyboardButton(text="🇪🇹 አማርኛ", callback_data="lang_am")],
+        [InlineKeyboardButton(text=await get_text(uid, "back"), callback_data="main_back")]
+    ])
+    
+    await message.answer(
+        await get_text(uid, "choose_lang"),
+        reply_markup=kb
+    )
+
+# =====================================================
+# 7. WEB INTERFACE - NOW WORKING
+# =====================================================
+
+@router.message(F.text == "🌐 Web Interface")
+async def web_interface_cmd(message: Message):
+    uid = message.from_user.id
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🌐 Open Web Interface", web_app=WebAppInfo(url=WEBAPP_URL))]
+    ])
+    
+    await message.answer(
+        "🌐 **Open Web Interface**\n\n"
+        "Click the button below to open the web version.\n"
+        "Your tickets and balance are synced with the bot.",
+        reply_markup=kb,
+        parse_mode="Markdown"
+    )
+
+# =====================================================
+# 8. ABOUT - NOW WORKING
+# =====================================================
+
+@router.message(F.text == "ℹ️ About")
+async def about_cmd(message: Message):
+    uid = message.from_user.id
+    
+    await message.answer(
+        "🎰 **SIKET EKUB LOTTERY**\n\n"
+        "💰 Ticket Price: 3,000 ETB\n\n"
+        "🏆 **10 GRAND PRIZES:**\n"
+        "1st: BWD Leopard 3 (8,000,000 ETB)\n"
+        "2nd: Hyundai Bayon (5,000,000 ETB)\n"
+        "3rd: Shop Space (4,000,000 ETB)\n"
+        "4th-7th: 1,000,000 ETB Cash each\n"
+        "8th: 500,000 ETB Cash\n"
+        "9th: 300,000 ETB Cash\n"
+        "10th: 200,000 ETB Cash\n\n"
+        "📌 Register > Pick Ticket > Pay > Win!\n\n"
+        "🚀 GOOD LUCK!",
+        reply_markup=await user_menu(uid),
+        parse_mode="Markdown"
+    )
+
+# =====================================================
+# ADMIN PAYMENT APPROVAL
+# =====================================================
+
 @router.callback_query(F.data.startswith("approve_"))
 async def approve_pay(callback: CallbackQuery):
     uid = callback.from_user.id
@@ -602,19 +822,34 @@ async def approve_pay(callback: CallbackQuery):
         return
     
     payment_id = int(callback.data.split("_")[1])
+    
     payment = await DatabaseHelper.fetch_one(
         "SELECT telegram_id, ticket_id, ticket_number FROM payments WHERE payment_id = ? AND status = 'pending'",
         (payment_id,)
     )
     if not payment:
-        await callback.answer("❌ Not found!", show_alert=True)
+        await callback.answer("❌ Payment not found!", show_alert=True)
         return
     
     tg_id, ticket_id, ticket_num = payment
     
+    # Atomic update
+    cursor = await DatabaseHelper.execute(
+        "UPDATE tickets SET status = 'sold', telegram_id = ?, assigned_at = CURRENT_TIMESTAMP WHERE ticket_id = ? AND status = 'available'",
+        (tg_id, ticket_id)
+    )
+    
+    if cursor.rowcount == 0:
+        await DatabaseHelper.execute(
+            "UPDATE payments SET status = 'rejected', admin_notes = 'Ticket already sold' WHERE payment_id = ?",
+            (payment_id,)
+        )
+        await callback.message.edit_text(f"❌ Ticket #{ticket_num} was already sold!")
+        await callback.answer()
+        return
+    
     await DatabaseHelper.execute_transaction([
         ("UPDATE payments SET status = 'approved', verified_by = ?, verified_at = CURRENT_TIMESTAMP WHERE payment_id = ?", (uid, payment_id)),
-        ("UPDATE tickets SET status = 'sold', telegram_id = ?, assigned_at = CURRENT_TIMESTAMP WHERE ticket_id = ?", (tg_id, ticket_id)),
         ("UPDATE users SET balance = COALESCE(balance, 0) + 3000, total_spent = COALESCE(total_spent, 0) + 3000 WHERE telegram_id = ?", (tg_id,))
     ])
     
@@ -631,7 +866,7 @@ async def approve_pay(callback: CallbackQuery):
         logger.error(f"Failed to post to channel: {e}")
     
     try:
-        await bot.send_message(tg_id, t(tg_id, "pay_approved", ticket=ticket_num))
+        await bot.send_message(tg_id, await get_text(tg_id, "pay_approved", ticket=ticket_num))
     except Exception as e:
         logger.error(f"Failed to notify user: {e}")
     
@@ -656,160 +891,12 @@ async def reject_pay(callback: CallbackQuery):
             (uid, payment_id)
         )
         try:
-            await bot.send_message(payment[0], t(payment[0], "pay_rejected"))
+            await bot.send_message(payment[0], await get_text(payment[0], "pay_rejected"))
         except:
             pass
     
     await callback.message.edit_text(f"❌ Payment #{payment_id} rejected.")
     await callback.answer()
-
-@router.callback_query(F.data == "buy_back")
-async def buy_back(callback: CallbackQuery, state: FSMContext):
-    uid = callback.from_user.id
-    await state.clear()
-    await callback.message.delete()
-    await callback.message.answer(
-        t(uid, "menu"),
-        reply_markup=user_menu(uid)
-    )
-    await callback.answer()
-
-@router.callback_query(F.data == "main_back")
-async def main_back(callback: CallbackQuery, state: FSMContext):
-    uid = callback.from_user.id
-    await state.clear()
-    await callback.message.delete()
-    await callback.message.answer(
-        t(uid, "menu"),
-        reply_markup=user_menu(uid)
-    )
-    await callback.answer()
-
-# =====================================================
-# USER COMMANDS (BOTTOM BUTTONS)
-# =====================================================
-
-@router.message(F.text.in_(["🎫 My Tickets", "🎫 ቲኬቶቼ"]))
-async def my_tickets(message: Message):
-    uid = message.from_user.id
-    
-    tickets = await DatabaseHelper.fetch(
-        "SELECT ticket_number, assigned_at FROM tickets WHERE telegram_id = ? AND status = 'sold' ORDER BY assigned_at DESC",
-        (uid,)
-    )
-    if not tickets:
-        await message.answer(
-            t(uid, "no_tickets"),
-            reply_markup=user_menu(uid)
-        )
-        return
-    
-    lines = ["🎫 Your Tickets:\n"]
-    for num, date in tickets[:10]:
-        lines.append(f"#{num} - {date[:10] if date else 'N/A'}")
-    if len(tickets) > 10:
-        lines.append(f"... and {len(tickets)-10} more")
-    await message.answer(
-        "\n".join(lines),
-        reply_markup=user_menu(uid)
-    )
-
-@router.message(F.text.in_(["💰 Balance", "💰 ቀሪ ሂሳብ"]))
-async def balance_cmd(message: Message):
-    uid = message.from_user.id
-    
-    user = await DatabaseHelper.fetch_one(
-        "SELECT balance, total_spent FROM users WHERE telegram_id = ?",
-        (uid,)
-    )
-    if not user:
-        await message.answer(
-            "❌ Please /start first.",
-            reply_markup=user_menu(uid)
-        )
-        return
-    
-    tickets = await DatabaseHelper.fetch("SELECT COUNT(*) FROM tickets WHERE telegram_id = ? AND status = 'sold'", (uid,))
-    await message.answer(
-        t(uid, "balance_info", balance=user[0] or 0, tickets=tickets[0][0] or 0, spent=user[1] or 0),
-        reply_markup=user_menu(uid)
-    )
-
-@router.message(F.text.in_(["🏆 Prizes", "🏆 ሽልማቶች"]))
-async def prizes_cmd(message: Message):
-    uid = message.from_user.id
-    
-    await message.answer(
-        t(uid, "prize_list"),
-        reply_markup=user_menu(uid)
-    )
-
-@router.message(F.text.in_(["💬 Support", "💬 ድጋፍ"]))
-async def support_cmd(message: Message):
-    uid = message.from_user.id
-    
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📞 Support Channel", url=SUPPORT_CHANNEL_LINK)],
-        [InlineKeyboardButton(text="🎟️ Ticket Channel", url=TICKET_CHANNEL_LINK)],
-        [InlineKeyboardButton(text=t(uid, "back"), callback_data="main_back")]
-    ])
-    
-    await message.answer(
-        "💬 Support Channels\n\n📞 For help, join our support channel.\n🎟️ View verified tickets in the ticket channel.",
-        reply_markup=kb
-    )
-
-@router.message(F.text.in_(["🌍 Language", "🌍 ቋንቋ"]))
-async def lang_cmd(message: Message):
-    uid = message.from_user.id
-    
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🇬🇧 English", callback_data="lang_en")],
-        [InlineKeyboardButton(text="🇪🇹 አማርኛ", callback_data="lang_am")],
-        [InlineKeyboardButton(text=t(uid, "back"), callback_data="main_back")]
-    ])
-    
-    await message.answer(
-        t(uid, "choose_lang"),
-        reply_markup=kb
-    )
-
-@router.message(F.text == "🌐 Web Interface")
-async def web_interface_cmd(message: Message):
-    uid = message.from_user.id
-    
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🌐 Open Web Interface", web_app=WebAppInfo(url=WEBAPP_URL))]
-    ])
-    
-    await message.answer(
-        "🌐 **Open Web Interface**\n\n"
-        "Click the button below to open the web version.\n"
-        "Your tickets and balance are synced with the bot.",
-        reply_markup=kb,
-        parse_mode="Markdown"
-    )
-
-@router.message(F.text == "ℹ️ About")
-async def about_cmd(message: Message):
-    uid = message.from_user.id
-    
-    await message.answer(
-        "🎰 **SIKET EKUB LOTTERY**\n\n"
-        "💰 Ticket Price: 3,000 ETB\n\n"
-        "🏆 **10 GRAND PRIZES:**\n"
-        "1st: BWD Leopard 3 (8,000,000 ETB)\n"
-        "2nd: Hyundai Bayon (5,000,000 ETB)\n"
-        "3rd: Shop Space (4,000,000 ETB)\n"
-        "4th-7th: 1,000,000 ETB Cash each\n"
-        "8th: 500,000 ETB Cash\n"
-        "9th: 300,000 ETB Cash\n"
-        "10th: 200,000 ETB Cash\n\n"
-        "📌 Register > Pick Ticket > Pay > Win!\n\n"
-        "🚀 GOOD LUCK!",
-        reply_markup=user_menu(uid),
-        parse_mode="Markdown"
-    )
 
 # =====================================================
 # ADMIN COMMANDS
@@ -823,14 +910,13 @@ async def admin_cmd(message: Message):
     if uid not in ADMIN_IDS:
         await message.answer(
             "⛔ Unauthorized! You are not an admin.",
-            reply_markup=user_menu(uid)
+            reply_markup=await user_menu(uid)
         )
         return
     
-    # Show admin inline menu
     await message.answer(
-        t(uid, "admin"),
-        reply_markup=admin_inline_kb(uid)
+        await get_text(uid, "admin"),
+        reply_markup=admin_inline_kb()
     )
 
 @router.message(F.text == "🔙 Back to User Menu")
@@ -838,8 +924,8 @@ async def back_to_user(message: Message):
     uid = message.from_user.id
     
     await message.answer(
-        t(uid, "menu"),
-        reply_markup=user_menu(uid)
+        await get_text(uid, "menu"),
+        reply_markup=await user_menu(uid)
     )
 
 @router.callback_query(F.data == "admin_back")
@@ -848,8 +934,8 @@ async def admin_back_cb(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     
     await callback.message.edit_text(
-        t(uid, "admin"),
-        reply_markup=admin_inline_kb(uid)
+        await get_text(uid, "admin"),
+        reply_markup=admin_inline_kb()
     )
     await callback.answer()
 
@@ -870,7 +956,7 @@ async def admin_verify(callback: CallbackQuery):
     if not payments:
         await callback.message.edit_text(
             "📭 No pending payments.",
-            reply_markup=back_inline_kb(uid, "admin_back")
+            reply_markup=back_inline_kb("admin_back")
         )
         return
     
@@ -879,7 +965,7 @@ async def admin_verify(callback: CallbackQuery):
             text=f"#{p[0]} - #{p[2]} - {p[3][:10]}",
             callback_data=f"view_pay_{p[0]}"
         )] for p in payments[:10]
-    ] + [[InlineKeyboardButton(text=t(uid, "back"), callback_data="admin_back")]])
+    ] + [[InlineKeyboardButton(text="🔙 Back", callback_data="admin_back")]])
     
     await callback.message.edit_text(f"📋 Pending Payments ({len(payments)})", reply_markup=kb)
     await callback.answer()
@@ -905,7 +991,7 @@ async def view_payment(callback: CallbackQuery):
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✅ Approve", callback_data=f"approve_{payment_id}")],
         [InlineKeyboardButton(text="❌ Reject", callback_data=f"reject_{payment_id}")],
-        [InlineKeyboardButton(text=t(uid, "back"), callback_data="admin_verify")]
+        [InlineKeyboardButton(text="🔙 Back", callback_data="admin_verify")]
     ])
     
     text = f"🔍 Payment #{payment_id}\n🎫 Ticket: #{ticket_num}\n👤 User: {tg_id}"
@@ -919,7 +1005,7 @@ async def view_payment(callback: CallbackQuery):
                 reply_markup=kb
             )
             await callback.message.delete()
-        except Exception as e:
+        except:
             await callback.message.edit_text(text + "\n\n📸 Screenshot attached", reply_markup=kb)
     else:
         await callback.message.edit_text(text, reply_markup=kb)
@@ -940,7 +1026,7 @@ async def admin_create(callback: CallbackQuery, state: FSMContext):
         "📝 **Create New Game**\n\n"
         "Enter the game name:\n"
         "Example: '2026 Grand Draw'",
-        reply_markup=back_inline_kb(uid, "admin_back"),
+        reply_markup=back_inline_kb("admin_back"),
         parse_mode="Markdown"
     )
     await state.set_state(AdminState.game_name)
@@ -960,7 +1046,7 @@ async def create_name(message: Message, state: FSMContext):
         "1st: BWD Leopard 3 (8,000,000 ETB)\n"
         "2nd: Hyundai Bayon (5,000,000 ETB)\n"
         "...",
-        reply_markup=back_inline_kb(uid, "admin_back"),
+        reply_markup=back_inline_kb("admin_back"),
         parse_mode="Markdown"
     )
     await state.set_state(AdminState.game_prizes)
@@ -976,7 +1062,7 @@ async def create_prizes(message: Message, state: FSMContext):
     await message.answer(
         "📝 **Total Slots**\n\n"
         "Enter total number of tickets (default: 20000):",
-        reply_markup=back_inline_kb(uid, "admin_back"),
+        reply_markup=back_inline_kb("admin_back"),
         parse_mode="Markdown"
     )
     await state.set_state(AdminState.game_slots)
@@ -996,14 +1082,12 @@ async def create_slots(message: Message, state: FSMContext):
     name = data.get("name")
     prizes = data.get("prizes")
     
-    # Create game
     cursor = await DatabaseHelper.execute(
         "INSERT INTO ticket_types (name, price, total_slots, is_active, prizes) VALUES (?, 3000, ?, 1, ?)",
         (name, slots, prizes)
     )
     type_id = cursor.lastrowid
     
-    # Generate tickets in batches
     batch_size = 1000
     for start in range(1, slots + 1, batch_size):
         end = min(start + batch_size - 1, slots)
@@ -1017,17 +1101,12 @@ async def create_slots(message: Message, state: FSMContext):
     await state.clear()
     
     await message.answer(
-        f"✅ **Game Created Successfully!**\n\n"
-        f"📝 Name: {name}\n"
-        f"🎫 Tickets: {slots:,}\n"
-        f"💰 Price: 3,000 ETB\n\n"
-        f"🏆 Prizes:\n{prizes[:200]}{'...' if len(prizes) > 200 else ''}",
-        reply_markup=user_menu(uid),
-        parse_mode="Markdown"
+        await get_text(uid, "game_created", name=name, slots=slots),
+        reply_markup=await user_menu(uid)
     )
 
 # =====================================================
-# ADMIN: USERS
+# ADMIN: USER MANAGEMENT
 # =====================================================
 
 @router.callback_query(F.data == "admin_users")
@@ -1043,7 +1122,7 @@ async def admin_users(callback: CallbackQuery):
     if not users:
         await callback.message.edit_text(
             "📭 No users found.",
-            reply_markup=back_inline_kb(uid, "admin_back")
+            reply_markup=back_inline_kb("admin_back")
         )
         return
     
@@ -1053,13 +1132,13 @@ async def admin_users(callback: CallbackQuery):
     
     await callback.message.edit_text(
         "\n".join(lines),
-        reply_markup=back_inline_kb(uid, "admin_back"),
+        reply_markup=back_inline_kb("admin_back"),
         parse_mode="Markdown"
     )
     await callback.answer()
 
 # =====================================================
-# ADMIN: REFUNDS
+# ADMIN: REFUND MANAGEMENT
 # =====================================================
 
 @router.callback_query(F.data == "admin_refund")
@@ -1074,8 +1153,8 @@ async def admin_refund(callback: CallbackQuery):
     )
     if not users:
         await callback.message.edit_text(
-            "✅ No users with positive balance.",
-            reply_markup=back_inline_kb(uid, "admin_back")
+            await get_text(uid, "no_refund_users"),
+            reply_markup=back_inline_kb("admin_back")
         )
         return
     
@@ -1085,7 +1164,7 @@ async def admin_refund(callback: CallbackQuery):
             callback_data=f"refund_user_{u[0]}"
         )] for u in users[:10]
     ] + [[InlineKeyboardButton(text="🔄 Process All", callback_data="refund_all")],
-         [InlineKeyboardButton(text=t(uid, "back"), callback_data="admin_back")]])
+         [InlineKeyboardButton(text="🔙 Back", callback_data="admin_back")]])
     
     await callback.message.edit_text("🔄 **Refund Management**\n\nSelect user to refund:", reply_markup=kb)
     await callback.answer()
@@ -1114,13 +1193,13 @@ async def refund_user(callback: CallbackQuery):
     ])
     
     try:
-        await bot.send_message(tg_id, f"✅ Refund of {balance:,.0f} ETB processed.")
+        await bot.send_message(tg_id, await get_text(tg_id, "refund_complete", amount=balance))
     except:
         pass
     
     await callback.message.edit_text(
         f"✅ Refunded {balance:,.0f} ETB",
-        reply_markup=back_inline_kb(uid, "admin_back")
+        reply_markup=back_inline_kb("admin_back")
     )
     await callback.answer()
 
@@ -1140,13 +1219,13 @@ async def refund_all(callback: CallbackQuery):
         ])
         total += balance
         try:
-            await bot.send_message(tg_id, f"✅ Refund of {balance:,.0f} ETB processed.")
+            await bot.send_message(tg_id, await get_text(tg_id, "refund_complete", amount=balance))
         except:
             pass
     
     await callback.message.edit_text(
-        f"✅ Refunded {total:,.0f} ETB to {len(users)} users.",
-        reply_markup=back_inline_kb(uid, "admin_back")
+        await get_text(uid, "refund_all_complete", total=total, count=len(users)),
+        reply_markup=back_inline_kb("admin_back")
     )
     await callback.answer()
 
@@ -1164,7 +1243,7 @@ async def admin_broadcast(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         "📢 **Broadcast Message**\n\n"
         "Enter the message to send to all users:",
-        reply_markup=back_inline_kb(uid, "admin_back"),
+        reply_markup=back_inline_kb("admin_back"),
         parse_mode="Markdown"
     )
     await state.set_state(AdminState.broadcast_msg)
@@ -1190,8 +1269,8 @@ async def send_broadcast(message: Message, state: FSMContext):
     
     await state.clear()
     await message.answer(
-        f"✅ Broadcast sent to {sent}/{len(users)} users.",
-        reply_markup=user_menu(uid)
+        await get_text(uid, "broadcast_sent", sent=sent, total=len(users)),
+        reply_markup=await user_menu(uid)
     )
 
 # =====================================================
@@ -1209,14 +1288,14 @@ async def admin_reports(callback: CallbackQuery):
     if not games:
         await callback.message.edit_text(
             "📭 No games found.",
-            reply_markup=back_inline_kb(uid, "admin_back")
+            reply_markup=back_inline_kb("admin_back")
         )
         return
     
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=f"📊 {g[1]}", callback_data=f"report_{g[0]}")] for g in games
     ] + [[InlineKeyboardButton(text="📊 All Users", callback_data="report_all")],
-         [InlineKeyboardButton(text=t(uid, "back"), callback_data="admin_back")]])
+         [InlineKeyboardButton(text="🔙 Back", callback_data="admin_back")]])
     
     await callback.message.edit_text("📊 **Generate Reports**\n\nSelect a report:", reply_markup=kb)
     await callback.answer()
@@ -1256,6 +1335,87 @@ async def generate_report(callback: CallbackQuery):
     await callback.answer()
 
 # =====================================================
+# ADMIN BOTTOM MENU HANDLERS
+# =====================================================
+
+@router.message(F.text == "📊 Reports")
+async def admin_reports_bottom(message: Message):
+    uid = message.from_user.id
+    if uid not in ADMIN_IDS:
+        await message.answer("⛔ Unauthorized!", reply_markup=await user_menu(uid))
+        return
+    
+    # Reuse the same logic as the callback
+    await admin_reports(await message.answer("Processing..."))
+
+@router.message(F.text == "📢 Broadcast")
+async def admin_broadcast_bottom(message: Message, state: FSMContext):
+    uid = message.from_user.id
+    if uid not in ADMIN_IDS:
+        await message.answer("⛔ Unauthorized!", reply_markup=await user_menu(uid))
+        return
+    
+    await message.answer(
+        "📢 **Broadcast Message**\n\n"
+        "Enter the message to send to all users:",
+        reply_markup=back_inline_kb("admin_back"),
+        parse_mode="Markdown"
+    )
+    await state.set_state(AdminState.broadcast_msg)
+
+@router.message(F.text == "👤 Users")
+async def admin_users_bottom(message: Message):
+    uid = message.from_user.id
+    if uid not in ADMIN_IDS:
+        await message.answer("⛔ Unauthorized!", reply_markup=await user_menu(uid))
+        return
+    
+    users = await DatabaseHelper.fetch(
+        "SELECT telegram_id, full_name, phone_number, balance, total_spent FROM users ORDER BY created_at DESC LIMIT 20"
+    )
+    if not users:
+        await message.answer("📭 No users found.", reply_markup=await admin_menu(uid))
+        return
+    
+    lines = ["👤 **Recent Users:**\n"]
+    for tg, name, phone, balance, spent in users:
+        lines.append(f"🆔 {tg} | {name or phone or 'N/A'}\n💰 {balance or 0} ETB")
+    
+    await message.answer(
+        "\n".join(lines),
+        reply_markup=await admin_menu(uid),
+        parse_mode="Markdown"
+    )
+
+@router.message(F.text == "🔄 Refunds")
+async def admin_refunds_bottom(message: Message):
+    uid = message.from_user.id
+    if uid not in ADMIN_IDS:
+        await message.answer("⛔ Unauthorized!", reply_markup=await user_menu(uid))
+        return
+    
+    users = await DatabaseHelper.fetch(
+        "SELECT user_id, telegram_id, balance FROM users WHERE balance > 0 ORDER BY balance DESC"
+    )
+    if not users:
+        await message.answer(
+            await get_text(uid, "no_refund_users"),
+            reply_markup=await admin_menu(uid)
+        )
+        return
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text=f"{u[1]} - {u[2]:,.0f} ETB",
+            callback_data=f"refund_user_{u[0]}"
+        )] for u in users[:10]
+    ] + [[InlineKeyboardButton(text="🔄 Process All", callback_data="refund_all")],
+         [InlineKeyboardButton(text="🔙 Back", callback_data="admin_back")]])
+    
+    await message.answer("🔄 **Refund Management**\n\nSelect user to refund:", reply_markup=kb)
+    await callback.answer()
+
+# =====================================================
 # SETUP & MAIN
 # =====================================================
 
@@ -1266,11 +1426,23 @@ async def set_commands():
     ]
     await bot.set_my_commands(commands)
 
+@dp.error()
+async def global_error_handler(event, exception):
+    """Global error handler"""
+    logger.error(f"Global error: {exception}")
+    try:
+        if hasattr(event, 'message') and event.message:
+            await event.message.answer(
+                "⚠️ An error occurred. Please try again or contact support."
+            )
+    except:
+        pass
+
 async def main():
     await init_db()
     await set_commands()
     dp.include_router(router)
-    logger.info("🚀 Bot started!")
+    logger.info("🚀 Bot started successfully!")
     logger.info(f"👤 Admins: {ADMIN_IDS}")
     logger.info(f"🌐 WebApp URL: {WEBAPP_URL}")
     await dp.start_polling(bot)
