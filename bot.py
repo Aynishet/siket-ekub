@@ -821,52 +821,52 @@ class AdminUserStates(StatesGroup):
 # START COMMAND - CHOICE MENU UNDER INPUT TEXT
 # =====================================================
 
-# @router.message(Command("start"))
-# async def cmd_start(message: Message, state: FSMContext):
-#     """Start command - show choice menu as reply keyboard under input"""
-#     await state.clear()
-#     uid = message.from_user.id
-    
-#     # Get webapp URL from environment
-#     webapp_url = os.getenv("WEBAPP_URL", "https://siket-ekub-webapp.onrender.com")
-    
-#     # Create choice menu as ReplyKeyboardMarkup (appears under input text)
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
-    """Start command - show choice menu in Amharic"""
+    """Start command - show choice menu in both languages"""
     await state.clear()
     uid = message.from_user.id
     webapp_url = os.getenv("WEBAPP_URL", "https://siket-ekub-webapp.onrender.com")
     
-    # Choice menu in Amharic ONLY
+    # Check if user exists
+    user = await DatabaseHelper.fetch_one("SELECT * FROM users WHERE telegram_id = ?", (uid,))
+    
+    if user:
+        # User exists - go to main menu
+        lang = user[8] if len(user) > 8 else "en"
+        shared_state.set_language(uid, lang)
+        await message.answer(
+            Localization.get_text(uid, "welcome"),
+            reply_markup=KeyboardBuilder.main_menu(uid)
+        )
+        return
+    
+    # Choice menu with both languages
     kb = ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="🤖 የቴሌግራም አማራጭ/Telegram")],
-            [KeyboardButton(text="🌐 የድረገጽ አማራጭ/Website")],
-            [KeyboardButton(text="ℹ️ ስለ ሲኬት ዕቁብ")]
+            [KeyboardButton(text="🤖 Use Telegram Bot / በቴሌግራም ለመክፈት")],
+            [KeyboardButton(text="🌐 Open Web Interface / የድርገጽ ለመክፈት")],
+            [KeyboardButton(text="ℹ️ About / ስለ ሲኬት ዕቁብ")]
         ],
         resize_keyboard=True
     )
     
-    await message.answer(
-        f"🎰 **ሲኬት ዕቁብ ሎተሪ**\n\n"
-        f"የቲኬት ዋጋ: 3,000 ብር\n\n"
-        f"🏆 **10 ዋና ሽልማቶች:**\n"
-        f"1ኛ: BWD Leopard 3 (8,000,000 ብር)\n"
-        f"2ኛ: Hyundai Bayon (5,000,000 ብር)\n"
-        f"3ኛ: የሱቅ ቦታ (4,000,000 ብር)\n"
-        f"4ኛ: 1,000,000 ብር ጥሬ ገንዘብ\n"
-        f"5ኛ: 1,000,000 ብር ጥሬ ገንዘብ\n"
-        f"6ኛ: 1,000,000 ብር ጥሬ ገንዘብ\n"
-        f"7ኛ: 1,000,000 ብር ጥሬ ገንዘብ\n"
-        f"8ኛ: 500,000 ብር ጥሬ ገንዘብ\n"
-        f"9ኛ: 300,000 ብር ጥሬ ገንዘብ\n"
-        f"10ኛ: 200,000 ብር ጥሬ ገንዘብ\n\n"
-        f"📌 ይመዝገቡ > ቲኬት ይምረጡ > 3,000 ብር ይክፈሉ > ያሸንፉ!\n\n"
-        f"🚀 መልካም እድል!\n\n"
-        f"እንዴት መጫወት እንደሚፈልጉ ይምረጡ:",
-        reply_markup=kb,
-        parse_mode="Markdown"
+    # Welcome with both languages
+    welcome_msg = (
+        "🎰 **SIKET EKUB LOTTERY** / **ሲኬት ዕቁብ ሎተሪ**\n\n"
+        "Ticket Price / የቲኬት ዋጋ: 3,000 ETB / ብር\n\n"
+        "🏆 **10 GRAND PRIZES** / **10 ዋና ሽልማቶች:**\n"
+        "1st: BWD Leopard 3 (8,000,000 ETB / ብር)\n"
+        "2nd: Hyundai Bayon (5,000,000 ETB / ብር)\n"
+        "3rd: Shop Space (4,000,000 ETB / ብር)\n"
+        "4th-7th: 1,000,000 ETB Cash each\n"
+        "8th: 500,000 ETB Cash\n"
+        "9th: 300,000 ETB Cash\n"
+        "10th: 200,000 ETB Cash\n\n"
+        "📌 Register > Pick Ticket > Pay 3,000 ETB > Win!\n"
+        "📌 ይመዝገቡ > ቲኬት ይምረጡ > 3,000 ብር ይክፈሉ > ያሸንፉ!\n\n"
+        "🚀 GOOD LUCK! / መልካም እድል!\n\n"
+        "Choose how to play / እንዴት መጫወት እንደሚፈልጉ ይምረጡ:"
     )
     
     await message.answer(welcome_msg, reply_markup=kb, parse_mode="Markdown")
@@ -875,36 +875,81 @@ async def cmd_start(message: Message, state: FSMContext):
 # CHOICE HANDLERS - Using Message Text (Under Input)
 # =====================================================
 
-@router.message(F.text.in_(["🤖 Use Telegram Bot", "🤖 በቴሌግራም ተጠቀም"]))
+@router.message(F.text.in_(["🤖 Use Telegram Bot / በቴሌግራም ተጠቀም", "🤖 Use Telegram Bot"]))
 async def choice_telegram(message: Message, state: FSMContext):
-    """User chose Telegram interface - show language selection"""
+    """User chose Telegram - show language selection"""
     uid = message.from_user.id
     
-    # Check if user already registered
-    user = await DatabaseHelper.fetch_one("SELECT * FROM users WHERE telegram_id = ?", (uid,))
-    
-    if user:
-        # User exists - go to main menu
-        lang = user[8] if len(user) > 8 else "en"
-        shared_state.set_language(uid, lang)
-        
-        await message.answer(
-            Localization.get_text(uid, "welcome"),
-            reply_markup=KeyboardBuilder.main_menu(uid)
-        )
-        return
-    
-    # New user - show language selection as inline buttons
+    # Show language selection
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🇬🇧 English", callback_data="lang_en")],
         [InlineKeyboardButton(text="🇪🇹 አማርኛ", callback_data="lang_am")]
     ])
     
     await message.answer(
-        Localization.get_text(uid, "choose_language"),
+        "🌍 **Please choose your language:** / **ቋንቋዎን ይምረጡ:**",
         reply_markup=kb,
         parse_mode="Markdown"
     )
+
+@router.message(F.text.in_(["🌐 Open Web Interface / የድር በይነገጽ ክፈት", "🌐 Open Web Interface"]))
+async def choice_web(message: Message):
+    """User chose Web - open WebApp directly"""
+    uid = message.from_user.id
+    webapp_url = os.getenv("WEBAPP_URL", "https://siket-ekub-webapp.onrender.com")
+    
+    # Check if user exists, if not create them
+    user = await DatabaseHelper.fetch_one("SELECT * FROM users WHERE telegram_id = ?", (uid,))
+    
+    if not user:
+        # Auto-register user
+        await DatabaseHelper.execute(
+            "INSERT INTO users (telegram_id, phone_number, address, language) VALUES (?, ?, ?, ?)",
+            (uid, "Pending", "Pending", "en")
+        )
+        logger.info(f"✅ Auto-registered user {uid} via Web choice")
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🌐 Open Web Interface", web_app=WebAppInfo(url=webapp_url))]
+    ])
+    
+    await message.answer(
+        "🌐 **Click to open the web interface:**\n\n"
+        "**የድር በይነገጽ ለመክፈት ይጫኑ:**",
+        reply_markup=kb,
+        parse_mode="Markdown"
+    )
+
+@router.message(F.text.in_(["ℹ️ About / ስለ ሲኬት ዕቁብ", "ℹ️ About"]))
+async def choice_about(message: Message):
+    """Show about information in both languages"""
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 Back / ወደ ኋላ", callback_data="choice_back")]
+    ])
+    
+    await message.answer(
+        "🎰 **SIKET EKUB LOTTERY** / **ሲኬት ዕቁብ ሎተሪ**\n\n"
+        "Ticket Price / የቲኬት ዋጋ: 3,000 ETB / ብር\n\n"
+        "🏆 **10 GRAND PRIZES** / **10 ዋና ሽልማቶች:**\n"
+        "1st: BWD Leopard 3 (8,000,000 ETB / ብር)\n"
+        "2nd: Hyundai Bayon (5,000,000 ETB / ብር)\n"
+        "3rd: Shop Space (4,000,000 ETB / ብር)\n"
+        "4th-7th: 1,000,000 ETB Cash each\n"
+        "8th: 500,000 ETB Cash\n"
+        "9th: 300,000 ETB Cash\n"
+        "10th: 200,000 ETB Cash\n\n"
+        "📌 Register > Pick Ticket > Pay 3,000 ETB > Win!\n"
+        "📌 ይመዝገቡ > ቲኬት ይምረጡ > 3,000 ብር ይክፈሉ > ያሸንፉ!\n\n"
+        "🚀 GOOD LUCK! / መልካም እድል!",
+        reply_markup=kb,
+        parse_mode="Markdown"
+    )
+
+@router.callback_query(F.data == "choice_back")
+async def choice_back(callback: CallbackQuery):
+    """Go back to start menu"""
+    await cmd_start(callback.message, None)
+    await callback.answer()
 
 @router.message(F.text == "🌐 የድር በይነገጽ ክፈት")
 async def choice_web(message: Message):
@@ -1012,16 +1057,39 @@ async def select_language(callback: CallbackQuery, state: FSMContext):
         one_time_keyboard=True
     )
     
-    welcome_text = (
-        f"{t(uid, 'welcome')}\n\n"
-        f"Ticket Price: 3,000 ETB\n\n"
-        f"{t(uid, 'prize_header')}\n"
-        f"{t(uid, 'prize_list')}\n\n"
-        f"{t(uid, 'how_to_play')}\n\n"
-        f"{t(uid, 'good_luck')}"
-    )
+    # Show welcome with prizes in selected language
+    if lang == "am":
+        welcome = (
+            f"🎰 **ሲኬት ዕቁብ ሎተሪ**\n\n"
+            f"የቲኬት ዋጋ: 3,000 ብር\n\n"
+            f"🏆 **10 ዋና ሽልማቶች:**\n"
+            f"1ኛ: BWD Leopard 3 (8,000,000 ብር)\n"
+            f"2ኛ: Hyundai Bayon (5,000,000 ብር)\n"
+            f"3ኛ: የሱቅ ቦታ (4,000,000 ብር)\n"
+            f"4ኛ-7ኛ: 1,000,000 ብር ጥሬ ገንዘብ\n"
+            f"8ኛ: 500,000 ብር ጥሬ ገንዘብ\n"
+            f"9ኛ: 300,000 ብር ጥሬ ገንዘብ\n"
+            f"10ኛ: 200,000 ብር ጥሬ ገንዘብ\n\n"
+            f"📌 ይመዝገቡ > ቲኬት ይምረጡ > 3,000 ብር ይክፈሉ > ያሸንፉ!\n\n"
+            f"🚀 መልካም እድል!"
+        )
+    else:
+        welcome = (
+            f"🎰 **SIKET EKUB LOTTERY**\n\n"
+            f"Ticket Price: 3,000 ETB\n\n"
+            f"🏆 **10 GRAND PRIZES:**\n"
+            f"1st: BWD Leopard 3 (8,000,000 ETB)\n"
+            f"2nd: Hyundai Bayon (5,000,000 ETB)\n"
+            f"3rd: Shop Space (4,000,000 ETB)\n"
+            f"4th-7th: 1,000,000 ETB Cash each\n"
+            f"8th: 500,000 ETB Cash\n"
+            f"9th: 300,000 ETB Cash\n"
+            f"10th: 200,000 ETB Cash\n\n"
+            f"📌 Register > Pick Ticket > Pay 3,000 ETB > Win!\n\n"
+            f"🚀 GOOD LUCK!"
+        )
     
-    await callback.message.edit_text(welcome_text)
+    await callback.message.edit_text(welcome, parse_mode="Markdown")
     await callback.message.answer(
         f"📱 {t(uid, 'share_phone_prompt')}",
         reply_markup=kb
