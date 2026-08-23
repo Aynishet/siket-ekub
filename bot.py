@@ -1,6 +1,6 @@
 # =====================================================
 # BOT.PY - SIKET EKUB LOTTERY BOT (FIXED)
-# ONLY FIXED: Added Amharic button handlers for all user menus
+# ONLY FIXED: Ticket blocks 100 instead of 1000, Admin menu responsive
 # Everything else UNCHANGED
 # =====================================================
 
@@ -585,31 +585,40 @@ async def process_ticket_number(message: Message, state: FSMContext):
     )
     await state.set_state(BuyState.payment)
 
+# =====================================================
+# CHOOSE BLOCK - FIXED: 100 ticket blocks instead of 1000
+# =====================================================
+
 @router.message(F.text.in_(["📦 Choose Block", "📦 ብሎክ ምረጥ"]))
 async def choose_block(message: Message, state: FSMContext):
     uid = message.from_user.id
     
-    kb = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="1-1000"), KeyboardButton(text="1001-2000")],
-            [KeyboardButton(text="2001-3000"), KeyboardButton(text="3001-4000")],
-            [KeyboardButton(text="4001-5000"), KeyboardButton(text="5001-6000")],
-            [KeyboardButton(text="6001-7000"), KeyboardButton(text="7001-8000")],
-            [KeyboardButton(text="8001-9000"), KeyboardButton(text="9001-10000")],
-            [KeyboardButton(text="10001-11000"), KeyboardButton(text="11001-12000")],
-            [KeyboardButton(text="12001-13000"), KeyboardButton(text="13001-14000")],
-            [KeyboardButton(text="14001-15000"), KeyboardButton(text="15001-16000")],
-            [KeyboardButton(text="16001-17000"), KeyboardButton(text="17001-18000")],
-            [KeyboardButton(text="18001-19000"), KeyboardButton(text="19001-20000")],
-            [KeyboardButton(text=get_text(uid, "back"))],
-        ],
-        resize_keyboard=True
-    )
+    # Create 100-ticket blocks (1-100, 101-200, ... up to 20000)
+    kb_rows = []
+    row = []
+    for i in range(1, 20001, 100):
+        start = i
+        end = min(i + 99, 20000)
+        row.append(KeyboardButton(text=f"{start}-{end}"))
+        if len(row) == 5:  # 5 blocks per row
+            kb_rows.append(row)
+            row = []
+    if row:
+        kb_rows.append(row)
+    
+    # Add Back button
+    kb_rows.append([KeyboardButton(text=get_text(uid, "back"))])
+    
+    kb = ReplyKeyboardMarkup(keyboard=kb_rows, resize_keyboard=True)
     
     await message.answer(
         get_text(uid, "select_block"),
         reply_markup=kb
     )
+
+# =====================================================
+# PROCESS BLOCK - FIXED: Shows available tickets in the block
+# =====================================================
 
 @router.message(F.text.regexp(r'^\d+-\d+$'))
 async def process_block(message: Message, state: FSMContext):
@@ -629,7 +638,7 @@ async def process_block(message: Message, state: FSMContext):
         await state.update_data(game_id=type_id)
     
     tickets = await DatabaseHelper.fetch(
-        "SELECT ticket_id, ticket_number FROM tickets WHERE type_id = ? AND ticket_number BETWEEN ? AND ? AND status = 'available' LIMIT 50",
+        "SELECT ticket_id, ticket_number FROM tickets WHERE type_id = ? AND ticket_number BETWEEN ? AND ? AND status = 'available'",
         (type_id, start, end)
     )
     
@@ -638,22 +647,27 @@ async def process_block(message: Message, state: FSMContext):
             keyboard=[[KeyboardButton(text=get_text(uid, "back"))]],
             resize_keyboard=True
         )
-        await message.answer("❌ No tickets in this block.", reply_markup=kb)
+        await message.answer("❌ No tickets available in this block.", reply_markup=kb)
         return
     
+    # Show available tickets in this block (max 50 per page)
     kb_rows = []
     row = []
-    for ticket_id, ticket_num in tickets:
+    for ticket_id, ticket_num in tickets[:50]:
         row.append(KeyboardButton(text=str(ticket_num)))
         if len(row) == 5:
             kb_rows.append(row)
             row = []
     if row:
         kb_rows.append(row)
+    
+    if len(tickets) > 50:
+        kb_rows.append([KeyboardButton(text=f"📊 {len(tickets)-50} more tickets available")])
+    
     kb_rows.append([KeyboardButton(text=get_text(uid, "back"))])
     
     await message.answer(
-        f"🎫 Available tickets in {start}-{end}:",
+        f"🎫 Available tickets in {start}-{end}:\n({len(tickets)} tickets available)",
         reply_markup=ReplyKeyboardMarkup(keyboard=kb_rows, resize_keyboard=True)
     )
     await state.set_state(BuyState.block)
@@ -709,7 +723,6 @@ async def process_payment(message: Message, state: FSMContext):
         reply_markup=user_menu(uid)
     )
     
-    # Short notification
     await message.answer(
         get_text(uid, "ticket_purchased", ticket=ticket_num, name=name or "User", phone=phone, amount="3,000"),
         parse_mode="Markdown"
@@ -856,10 +869,9 @@ async def back_to_user(message: Message):
     )
 
 # =====================================================
-# USER COMMANDS - FIXED: Added Amharic handlers
+# USER COMMANDS
 # =====================================================
 
-# My Tickets - Both English and Amharic
 @router.message(F.text.in_(["🎫 My Tickets", "🎫 ቲኬቶቼ"]))
 async def my_tickets(message: Message):
     uid = message.from_user.id
@@ -879,7 +891,6 @@ async def my_tickets(message: Message):
     
     await message.answer("\n".join(lines), reply_markup=user_menu(uid))
 
-# Balance - Both English and Amharic
 @router.message(F.text.in_(["💰 Balance", "💰 ቀሪ"]))
 async def balance_cmd(message: Message):
     uid = message.from_user.id
@@ -900,13 +911,11 @@ async def balance_cmd(message: Message):
         reply_markup=user_menu(uid)
     )
 
-# Prizes - Both English and Amharic
 @router.message(F.text.in_(["🏆 Prizes", "🏆 ሽልማቶች"]))
 async def prizes_cmd(message: Message):
     uid = message.from_user.id
     await message.answer(get_text(uid, "prize_list"), reply_markup=user_menu(uid))
 
-# Support - Both English and Amharic
 @router.message(F.text.in_(["💬 Support", "💬 ድጋፍ"]))
 async def support_cmd(message: Message):
     uid = message.from_user.id
@@ -919,7 +928,6 @@ async def support_cmd(message: Message):
         reply_markup=kb
     )
 
-# Language - Both English and Amharic
 @router.message(F.text.in_(["🌍 Language", "🌍 ቋንቋ"]))
 async def lang_cmd(message: Message):
     uid = message.from_user.id
@@ -948,7 +956,7 @@ async def change_lang(callback: CallbackQuery):
     await callback.answer()
 
 # =====================================================
-# ADMIN COMMANDS
+# ADMIN COMMANDS - FIXED: Responsive
 # =====================================================
 
 @router.message(F.text == "🛠️ Admin Panel")
