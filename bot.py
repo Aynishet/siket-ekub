@@ -1,7 +1,9 @@
 # =====================================================
 # BOT.PY - SIKET EKUB LOTTERY BOT
-# Complete working version with PostgreSQL
-# Registration flow fixed: User registers ONCE, permanent
+# Registration FIRST (once) → Choice Menu → Bot/Web
+# Language toggle does NOT trigger registration
+# 50-ticket blocks for better viewing
+# PostgreSQL for persistent data
 # =====================================================
 
 import sys
@@ -31,9 +33,9 @@ from aiogram.types import (
     BufferedInputFile, BotCommand, WebAppInfo
 )
 
-from dotenv import load_dotenv
 import asyncpg
 from asyncpg import Pool
+from dotenv import load_dotenv
 
 # =====================================================
 # ENV
@@ -49,9 +51,6 @@ ADMIN_IDS = [int(x.strip()) for x in admin_ids_raw.split(",") if x.strip()]
 if not TOKEN or not ADMIN_IDS:
     raise ValueError("BOT_TOKEN and ADMIN_IDS required!")
 
-# =====================================================
-# POSTGRESQL DATABASE URL
-# =====================================================
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://siket_ekub_user:TPgM4oBmNyD3WMR5slAdWXjA0lvn2vkH@dpg-da4ucgnqj5pc73b8bt5g-a/siket_ekub")
 
 if not DATABASE_URL:
@@ -62,28 +61,20 @@ SUPPORT_CHANNEL_LINK = os.getenv("SUPPORT_CHANNEL_LINK", "https://t.me/siketekub
 TICKET_CHANNEL_LINK = os.getenv("TICKET_CHANNEL_LINK", "https://t.me/siketekubtiketo")
 TICKET_CHANNEL_ID = os.getenv("TICKET_CHANNEL_ID", "@siketekubtiketo")
 
-# =====================================================
-# LOGGING
-# =====================================================
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-# =====================================================
-# BOT INITIALIZATION
-# =====================================================
 storage = MemoryStorage()
 bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=storage)
 router = Router()
 
 # =====================================================
-# POSTGRESQL CONNECTION AND INITIALIZATION
+# POSTGRESQL CONNECTION POOL
 # =====================================================
-
 db_pool = None
 
 async def get_db_pool():
-    """Get or create PostgreSQL connection pool"""
     global db_pool
     if db_pool is None:
         db_pool = await asyncpg.create_pool(
@@ -96,9 +87,7 @@ async def get_db_pool():
     return db_pool
 
 async def init_db_postgres():
-    """Initialize PostgreSQL tables"""
     pool = await get_db_pool()
-    
     async with pool.acquire() as conn:
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -114,7 +103,6 @@ async def init_db_postgres():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS ticket_types (
                 type_id SERIAL PRIMARY KEY,
@@ -126,7 +114,6 @@ async def init_db_postgres():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS tickets (
                 ticket_id SERIAL PRIMARY KEY,
@@ -140,7 +127,6 @@ async def init_db_postgres():
                 UNIQUE(type_id, ticket_number)
             )
         """)
-        
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS payments (
                 payment_id SERIAL PRIMARY KEY,
@@ -161,7 +147,6 @@ async def init_db_postgres():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS refunds (
                 refund_id SERIAL PRIMARY KEY,
@@ -176,18 +161,15 @@ async def init_db_postgres():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_tickets_telegram_id ON tickets(telegram_id)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_payments_telegram_id ON payments(telegram_id)")
-        
         logger.info("✅ PostgreSQL tables and indexes created/verified")
 
 # =====================================================
-# DATABASE HELPER - POSTGRESQL VERSION
+# DATABASE HELPER - POSTGRESQL
 # =====================================================
-
 class DatabaseHelper:
     @staticmethod
     async def execute(query: str, *params):
@@ -275,7 +257,7 @@ TEXTS = {
         "lang": "🌍 Language",
         "reg_phone": "📱 Share Phone",
         "reg_address": "📍 Enter your address:",
-        "registered": "✅ Registration complete! You can now buy tickets.",
+        "registered": "✅ Registration complete! You can now play.",
         "pick_ticket": "🎫 Choose ticket:",
         "random_pick": "🎲 Random",
         "type_number": "✏️ Type Number",
@@ -311,7 +293,7 @@ TEXTS = {
         "open_web": "🌐 Open Web",
         "about": "ℹ️ About",
         "sold": "SOLD",
-        "select_block": "📦 Select block:",
+        "select_block": "📦 Select block (50 tickets):",
         "enter_number": "✏️ Enter ticket number:",
         "invalid_number": "❌ Invalid number.",
         "ticket_not_found": "❌ Ticket not found.",
@@ -319,7 +301,6 @@ TEXTS = {
         "admin_panel": "🛠️ Admin Panel",
         "back_user": "🔙 Back to User",
         "no_users": "📭 No users found.",
-        "ticket_purchased": "🎉 Ticket #{ticket} purchased!\n👤 {name}\n📱 {phone}\n💰 {amount} ETB",
     },
     "am": {
         "welcome": "🎰 እንኳን ወደ ሲኬት ዕቁብ በደህና መጡ!\n💰 ዋጋ: 3,000 ብር",
@@ -332,7 +313,7 @@ TEXTS = {
         "lang": "🌍 ቋንቋ",
         "reg_phone": "📱 ስልክ አጋሩ",
         "reg_address": "📍 አድራሻ አስገባ:",
-        "registered": "✅ ምዝገባ ተጠናቋል! አሁን ቲኬት መግዛት ይችላሉ።",
+        "registered": "✅ ምዝገባ ተጠናቋል! አሁን መጫወት ይችላሉ።",
         "pick_ticket": "🎫 ቲኬት ምረጥ:",
         "random_pick": "🎲 በዘፈቀደ",
         "type_number": "✏️ ቁጥር ጻፍ",
@@ -368,7 +349,7 @@ TEXTS = {
         "open_web": "🌐 በድር",
         "about": "ℹ️ መረጃ",
         "sold": "ተሽጧል",
-        "select_block": "📦 ብሎክ ምረጥ:",
+        "select_block": "📦 ብሎክ ምረጥ (50 ቲኬቶች):",
         "enter_number": "✏️ ቲኬት ቁጥር አስገባ:",
         "invalid_number": "❌ ልክ ያልሆነ ቁጥር።",
         "ticket_not_found": "❌ ቲኬት አልተገኘም።",
@@ -376,7 +357,6 @@ TEXTS = {
         "admin_panel": "🛠️ የአስተዳዳሪ ፓነል",
         "back_user": "🔙 ወደ ተጠቃሚ",
         "no_users": "📭 ምንም ተጠቃሚ የለም።",
-        "ticket_purchased": "🎉 ቲኬት #{ticket} ተገዝቷል!\n👤 {name}\n📱 {phone}\n💰 {amount} ብር",
     }
 }
 
@@ -454,8 +434,7 @@ class AdminState(StatesGroup):
     manual_ticket = State()
 
 # =====================================================
-# =====================================================
-# START COMMAND - FIXED: Check user first
+# START - REGISTRATION FIRST (ONCE)
 # =====================================================
 
 @router.message(Command("start"))
@@ -467,35 +446,41 @@ async def start_cmd(message: Message, state: FSMContext):
     user = await DatabaseHelper.fetch_one("SELECT * FROM users WHERE telegram_id = $1", uid)
     
     if user:
-        # User exists - set language and show choice menu
+        # USER EXISTS - Show CHOICE MENU directly
         lang = user[8] if len(user) > 8 else "en"
         LangCache.set(uid, lang)
         await message.answer(
-            "🎰 **Siket Ekub Lottery**\n\nChoose how to play:",
+            "🎰 **Siket Ekub Lottery**\n\n"
+            "✅ You are already registered!\n\n"
+            "Choose how to play:",
             reply_markup=choice_menu(),
             parse_mode="Markdown"
         )
         return
     
-    # NEW USER - Show language selection FIRST
+    # NEW USER - Show language selection for registration
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🇬🇧 English", callback_data="lang_en")],
-        [InlineKeyboardButton(text="🇪🇹 አማርኛ", callback_data="lang_am")],
+        [InlineKeyboardButton(text="🇬🇧 English", callback_data="reg_lang_en")],
+        [InlineKeyboardButton(text="🇪🇹 አማርኛ", callback_data="reg_lang_am")],
     ])
     
     await message.answer(
-        "🌍 Welcome! Choose your language:\n\n🌍 ቋንቋ ምረጥ:",
-        reply_markup=kb
+        "🌍 **Welcome!**\n\n"
+        "Please choose your language to register:\n\n"
+        "🌍 **እንኳን ደህና መጡ!**\n\n"
+        "እባክዎ ለመመዝገብ ቋንቋዎን ይምረጡ:",
+        reply_markup=kb,
+        parse_mode="Markdown"
     )
 
 # =====================================================
-# LANGUAGE SELECTION - NEW USER REGISTRATION
+# REGISTRATION LANGUAGE SELECTION
 # =====================================================
 
-@router.callback_query(F.data.startswith("lang_"))
-async def set_lang(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(F.data.startswith("reg_lang_"))
+async def reg_set_lang(callback: CallbackQuery, state: FSMContext):
     uid = callback.from_user.id
-    lang = callback.data.split("_")[1]
+    lang = callback.data.split("_")[2]
     LangCache.set(uid, lang)
     
     await callback.message.delete()
@@ -531,7 +516,7 @@ async def reg_address(message: Message, state: FSMContext):
     address = message.text
     lang = LangCache.get(uid)
     
-    # INSERT USER - This is the ONLY place user is created
+    # INSERT USER - This is the ONLY place user is created (REGISTRATION ONCE)
     await DatabaseHelper.execute(
         "INSERT INTO users (telegram_id, phone_number, address, language) VALUES ($1, $2, $3, $4)",
         uid, phone, address, lang
@@ -539,12 +524,12 @@ async def reg_address(message: Message, state: FSMContext):
     await state.clear()
     
     await message.answer(
-        get_text(uid, "registered"),
+        "✅ " + get_text(uid, "registered"),
         reply_markup=choice_menu()
     )
 
 # =====================================================
-# LANGUAGE TOGGLE - FOR EXISTING USERS ONLY
+# LANGUAGE TOGGLE - FOR EXISTING USERS ONLY (NO REGISTRATION)
 # =====================================================
 
 @router.message(F.text.in_(["🌍 Language", "🌍 ቋንቋ"]))
@@ -554,7 +539,7 @@ async def lang_toggle(message: Message):
     # Check if user exists
     user = await DatabaseHelper.fetch_one("SELECT * FROM users WHERE telegram_id = $1", uid)
     if not user:
-        await message.answer("❌ Please /start first.")
+        await message.answer("❌ Please /start first to register.")
         return
     
     # Show language selection (just toggles language, NO registration)
@@ -569,7 +554,7 @@ async def toggle_lang(callback: CallbackQuery):
     uid = callback.from_user.id
     lang = callback.data.split("_")[2]
     
-    # Update language in database
+    # Update language in database ONLY (NO REGISTRATION)
     await DatabaseHelper.execute(
         "UPDATE users SET language = $1 WHERE telegram_id = $2",
         lang, uid
@@ -590,6 +575,12 @@ async def toggle_lang(callback: CallbackQuery):
 @router.message(F.text == "🤖 Use Telegram")
 async def use_telegram(message: Message):
     uid = message.from_user.id
+    
+    user = await DatabaseHelper.fetch_one("SELECT * FROM users WHERE telegram_id = $1", uid)
+    if not user:
+        await message.answer("❌ Please /start first to register.")
+        return
+    
     await message.answer(
         get_text(uid, "menu"),
         reply_markup=user_menu(uid)
@@ -602,12 +593,22 @@ async def use_telegram(message: Message):
 @router.message(F.text == "🌐 Open Web")
 async def open_web(message: Message):
     uid = message.from_user.id
+    
+    user = await DatabaseHelper.fetch_one("SELECT * FROM users WHERE telegram_id = $1", uid)
+    if not user:
+        await message.answer("❌ Please /start first to register.")
+        return
+    
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🌐 Open Web", web_app=WebAppInfo(url=WEBAPP_URL))]
     ])
+    
     await message.answer(
-        "🌐 Click to open web interface:",
-        reply_markup=kb
+        "🌐 **Open Web Interface**\n\n"
+        "Click the button below to open the web version.\n"
+        "Your account is already registered and ready!",
+        reply_markup=kb,
+        parse_mode="Markdown"
     )
 
 # =====================================================
@@ -617,6 +618,7 @@ async def open_web(message: Message):
 @router.message(F.text == "ℹ️ About")
 async def about(message: Message):
     uid = message.from_user.id
+    
     await message.answer(
         "🎰 **Siket Ekub Lottery**\n\n"
         "💰 Price: 3,000 ETB\n\n"
@@ -766,13 +768,14 @@ async def process_ticket_number(message: Message, state: FSMContext):
     await state.set_state(BuyState.payment)
 
 # =====================================================
-# CHOOSE BLOCK - 50 tickets per block
+# CHOOSE BLOCK - 50 TICKETS PER BLOCK
 # =====================================================
 
 @router.message(F.text.in_(["📦 Choose Block", "📦 ብሎክ ምረጥ"]))
 async def choose_block(message: Message, state: FSMContext):
     uid = message.from_user.id
     
+    # Create 50-ticket blocks (1-50, 51-100, ... up to 20000)
     kb_rows = []
     row = []
     for i in range(1, 20001, 50):
@@ -824,6 +827,7 @@ async def process_block(message: Message, state: FSMContext):
         await message.answer("❌ No tickets available in this block.", reply_markup=kb)
         return
     
+    # Show available tickets (max 50 per page)
     kb_rows = []
     row = []
     for ticket_id, ticket_num in tickets[:50]:
@@ -896,14 +900,9 @@ async def process_payment(message: Message, state: FSMContext):
         reply_markup=user_menu(uid)
     )
     
-    await message.answer(
-        get_text(uid, "ticket_purchased", ticket=ticket_num, name=name or "User", phone=phone, amount="3,000"),
-        parse_mode="Markdown"
-    )
-    
     for admin in ADMIN_IDS:
         try:
-            msg = f"🔔 New Payment\n🎫 #{ticket_num}\n👤 {name or 'User'} ({phone})\n🆔 {payment_id}"
+            msg = f"🔔 New Payment\n🎫 #{ticket_num}\n👤 {name or 'User'}\n🆔 {payment_id}"
             if screenshot:
                 img = base64.b64decode(screenshot)
                 await bot.send_photo(
@@ -928,7 +927,7 @@ async def process_payment(message: Message, state: FSMContext):
             pass
 
 # =====================================================
-# APPROVE/REJECT PAYMENT
+# APPROVE/REJECT
 # =====================================================
 
 @router.callback_query(F.data.startswith("approve_"))
@@ -949,12 +948,12 @@ async def approve_pay(callback: CallbackQuery):
     
     tg_id, ticket_id, ticket_num = payment
     
-    result = await DatabaseHelper.execute(
+    cursor = await DatabaseHelper.execute(
         "UPDATE tickets SET status = 'sold', telegram_id = $1, assigned_at = CURRENT_TIMESTAMP WHERE ticket_id = $2 AND status = 'available'",
         tg_id, ticket_id
     )
     
-    if result and "UPDATE 0" in result:
+    if "UPDATE 0" in str(cursor):
         await DatabaseHelper.execute(
             "UPDATE payments SET status = 'rejected', admin_notes = 'Ticket already sold' WHERE payment_id = $1",
             payment_id
@@ -963,32 +962,23 @@ async def approve_pay(callback: CallbackQuery):
         await callback.answer()
         return
     
-    user_info = await DatabaseHelper.fetch_one(
-        "SELECT full_name, phone_number FROM users WHERE telegram_id = $1",
-        tg_id
-    )
-    name = user_info[0] if user_info else "User"
-    phone = user_info[1] if user_info else "N/A"
-    
     await DatabaseHelper.execute_transaction([
         ("UPDATE payments SET status = 'approved', verified_by = $1, verified_at = CURRENT_TIMESTAMP WHERE payment_id = $2", uid, payment_id),
         ("UPDATE users SET balance = COALESCE(balance, 0) + 3000, total_spent = COALESCE(total_spent, 0) + 3000 WHERE telegram_id = $1", tg_id)
     ])
     
     try:
+        user = await DatabaseHelper.fetch_one("SELECT phone_number FROM users WHERE telegram_id = $1", tg_id)
+        phone = user[0] if user else "N/A"
         await bot.send_message(
             TICKET_CHANNEL_ID,
-            f"🎟️ Verified Ticket\n#{ticket_num}\n👤 {name} ({phone})\n💰 3,000 ETB\n✅ {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+            f"🎟️ Verified Ticket\n#{ticket_num}\n👤 {phone}\n💰 3,000 ETB\n✅ {datetime.now().strftime('%Y-%m-%d %H:%M')}"
         )
     except:
         pass
     
     try:
-        await bot.send_message(
-            tg_id,
-            get_text(tg_id, "ticket_purchased", ticket=ticket_num, name=name, phone=phone, amount="3,000"),
-            parse_mode="Markdown"
-        )
+        await bot.send_message(tg_id, get_text(tg_id, "pay_approved", ticket=ticket_num))
     except:
         pass
     
@@ -1102,10 +1092,6 @@ async def support_cmd(message: Message):
     )
 
 # =====================================================
-# LANGUAGE TOGGLE - Handled earlier in the file
-# =====================================================
-
-# =====================================================
 # ADMIN COMMANDS
 # =====================================================
 
@@ -1122,7 +1108,7 @@ async def admin_cmd(message: Message):
     )
 
 # =====================================================
-# ADMIN: CREATE GAME
+# ADMIN: CREATE GAME (WITH 20000 TICKET GENERATION)
 # =====================================================
 
 @router.message(F.text.in_(["📝 Create Game", "📝 ጨዋታ ፍጠር"]))
@@ -1186,6 +1172,10 @@ async def create_game_slots(message: Message, state: FSMContext):
     )
     type_id = result[0] if result else None
     
+    # =====================================================
+    # TICKET GENERATION - 20000 TICKETS IN BATCHES OF 1000
+    # =====================================================
+    logger.info(f"🎫 Generating {slots} tickets for game '{name}'...")
     batch_size = 1000
     for start in range(1, slots + 1, batch_size):
         end = min(start + batch_size - 1, slots)
@@ -1194,7 +1184,7 @@ async def create_game_slots(message: Message, state: FSMContext):
                 "INSERT INTO tickets (type_id, ticket_number, status) VALUES ($1, $2, 'available')",
                 type_id, i
             )
-        logger.info(f"Created tickets {start}-{end}")
+        logger.info(f"✅ Generated tickets {start}-{end}")
     
     await state.clear()
     await message.answer(
@@ -1604,11 +1594,7 @@ async def admin_buy_ticket(message: Message, state: FSMContext):
     )
     
     try:
-        await bot.send_message(
-            target_id,
-            get_text(target_id, "ticket_purchased", ticket=ticket_num, name=name or "User", phone=phone, amount="3,000"),
-            parse_mode="Markdown"
-        )
+        await bot.send_message(target_id, f"🎉 Admin purchased ticket #{ticket_num} for you!")
     except:
         pass
 
@@ -1648,12 +1634,12 @@ async def admin_manual_process(message: Message, state: FSMContext):
         await message.answer("❌ Invalid number.")
         return
     
-    result = await DatabaseHelper.execute(
+    cursor = await DatabaseHelper.execute(
         "UPDATE tickets SET status = 'sold', assigned_at = CURRENT_TIMESTAMP WHERE ticket_number = $1 AND status = 'available'",
         num
     )
     
-    if result and "UPDATE 1" in result:
+    if "UPDATE 1" in str(cursor):
         await message.answer(f"✅ Ticket #{num} marked as sold!", reply_markup=admin_menu(uid))
     else:
         await message.answer(f"❌ Ticket #{num} not available.", reply_markup=admin_menu(uid))
