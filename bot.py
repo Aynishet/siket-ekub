@@ -37,6 +37,7 @@ from dotenv import load_dotenv
 import asyncpg
 from asyncpg import Pool
 # =====================================================
+# =====================================================
 # ENV
 # =====================================================
 ssl._create_default_https_context = ssl._create_unverified_context
@@ -54,6 +55,23 @@ if not TOKEN or not ADMIN_IDS:
 # POSTGRESQL DATABASE URL
 # =====================================================
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://siket_ekub_user:TPgM4oBmNyD3WMR5slAdWXjA0lvn2vkH@dpg-da4ucgnqj5pc73b8bt5g-a/siket_ekub")
+
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL is missing! Required for PostgreSQL.")
+
+WEBAPP_URL = os.getenv("WEBAPP_URL", "https://siket-ekub-webapp.onrender.com")
+SUPPORT_CHANNEL_LINK = os.getenv("SUPPORT_CHANNEL_LINK", "https://t.me/siketekub")
+TICKET_CHANNEL_LINK = os.getenv("TICKET_CHANNEL_LINK", "https://t.me/siketekubtiketo")
+TICKET_CHANNEL_ID = os.getenv("TICKET_CHANNEL_ID", "@siketekubtiketo")
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
+
+storage = MemoryStorage()
+bot = Bot(token=TOKEN)
+dp = Dispatcher(storage=storage)
+router = Router()
+
 # =====================================================
 # POSTGRESQL CONNECTION AND INITIALIZATION
 # =====================================================
