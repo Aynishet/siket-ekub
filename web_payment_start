@@ -1,7 +1,6 @@
 # =====================================================
 # BOT.PY - SIKET EKUB LOTTERY BOT
 # COMPLETE PRODUCTION BOT - ALL FEATURES WORKING
-# No Game Creation/Selection - 20000 Tickets Auto-Generated
 # =====================================================
 
 import sys
@@ -61,9 +60,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 storage = MemoryStorage()
-bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=storage)
 router = Router()
+tg_bot = Bot(token=TOKEN)  # CHANGED: bot -> tg_bot
 
 # =====================================================
 # DATABASE
@@ -392,8 +391,6 @@ class AdminState(StatesGroup):
     buy_user_id = State()
     buy_ticket_num = State()
     manual_ticket = State()
-    refund_user_id = State()
-    refund_reason = State()
 
 # =====================================================
 # HELPERS
@@ -757,8 +754,8 @@ async def process_payment(message: Message, state: FSMContext):
     screenshot = ""
     if message.photo:
         photo = message.photo[-1]
-        file = await bot.get_file(photo.file_id)
-        downloaded = await bot.download_file(file.file_path)
+        file = await tg_bot.get_file(photo.file_id)  # CHANGED: bot -> tg_bot
+        downloaded = await tg_bot.download_file(file.file_path)  # CHANGED: bot -> tg_bot
         screenshot = base64.b64encode(downloaded.read()).decode('utf-8')
     
     result = await DB.execute(
@@ -775,12 +772,12 @@ async def process_payment(message: Message, state: FSMContext):
             msg = f"🔔 New Payment\n🎫 #{ticket_num}\n👤 {name} ({phone})\n🆔 {payment_id}"
             if screenshot:
                 img = base64.b64decode(screenshot)
-                await bot.send_photo(admin, BufferedInputFile(img, filename="pay.jpg"), caption=msg, reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                await tg_bot.send_photo(admin, BufferedInputFile(img, filename="pay.jpg"), caption=msg, reply_markup=InlineKeyboardMarkup(inline_keyboard=[  # CHANGED: bot -> tg_bot
                     [InlineKeyboardButton(text="✅ Approve", callback_data=f"approve_{payment_id}")],
                     [InlineKeyboardButton(text="❌ Reject", callback_data=f"reject_{payment_id}")]
                 ]))
             else:
-                await bot.send_message(admin, msg, reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                await tg_bot.send_message(admin, msg, reply_markup=InlineKeyboardMarkup(inline_keyboard=[  # CHANGED: bot -> tg_bot
                     [InlineKeyboardButton(text="✅ Approve", callback_data=f"approve_{payment_id}")],
                     [InlineKeyboardButton(text="❌ Reject", callback_data=f"reject_{payment_id}")]
                 ]))
@@ -817,7 +814,6 @@ async def approve_pay(callback: CallbackQuery):
     user_id = user[0]
     phone = user[3] or "N/A"
     
-    # Assign the ticket (status must be 'pending')
     assigned = await assign_ticket(ticket_id, user_id, tg_id, phone)
     
     if "UPDATE 0" in str(assigned):
@@ -832,7 +828,7 @@ async def approve_pay(callback: CallbackQuery):
     ])
     
     try:
-        await bot.send_message(
+        await tg_bot.send_message(  # CHANGED: bot -> tg_bot
             TICKET_CHANNEL_ID,
             f"🎟️ Verified Ticket\n#{ticket_num}\n👤 {phone}\n💰 3,000 ETB\n✅ {datetime.now().strftime('%Y-%m-%d %H:%M')}"
         )
@@ -840,7 +836,7 @@ async def approve_pay(callback: CallbackQuery):
         pass
     
     try:
-        await bot.send_message(tg_id, text(tg_id, "pay_approved", ticket=ticket_num))
+        await tg_bot.send_message(tg_id, text(tg_id, "pay_approved", ticket=ticket_num))  # CHANGED: bot -> tg_bot
     except:
         pass
     
@@ -864,11 +860,10 @@ async def reject_pay(callback: CallbackQuery):
         payment_id
     )
     if payment:
-        # Release the ticket back to available
         await DB.execute("UPDATE tickets SET status = 'available', user_id = NULL, telegram_id = NULL, phone_number = NULL WHERE ticket_id = $1", payment[1])
         await DB.execute("UPDATE payments SET status = 'rejected', verified_by = $1 WHERE payment_id = $2", uid, payment_id)
         try:
-            await bot.send_message(payment[0], text(payment[0], "pay_rejected"))
+            await tg_bot.send_message(payment[0], text(payment[0], "pay_rejected"))  # CHANGED: bot -> tg_bot
         except:
             pass
     
@@ -1076,7 +1071,7 @@ async def refund_user(callback: CallbackQuery):
     ])
     
     try:
-        await bot.send_message(tg_id, text(tg_id, "refund_complete", amount=balance))
+        await tg_bot.send_message(tg_id, text(tg_id, "refund_complete", amount=balance))  # CHANGED: bot -> tg_bot
     except:
         pass
     
@@ -1105,7 +1100,7 @@ async def refund_all(callback: CallbackQuery):
         ])
         total += balance
         try:
-            await bot.send_message(tg_id, text(tg_id, "refund_complete", amount=balance))
+            await tg_bot.send_message(tg_id, text(tg_id, "refund_complete", amount=balance))  # CHANGED: bot -> tg_bot
         except:
             pass
         await asyncio.sleep(0.05)
@@ -1151,7 +1146,7 @@ async def send_broadcast(message: Message, state: FSMContext):
     sent = 0
     for user in users:
         try:
-            await bot.send_message(user[0], f"📢 {msg}")
+            await tg_bot.send_message(user[0], f"📢 {msg}")  # CHANGED: bot -> tg_bot
             sent += 1
             await asyncio.sleep(0.05)
         except:
@@ -1284,7 +1279,6 @@ async def admin_buy_ticket(message: Message, state: FSMContext):
     phone = user[3] or "N/A"
     name = user[2] or "User"
     
-    # Assign directly (admin bypasses pending)
     await DB.execute("UPDATE tickets SET status = 'sold', user_id = $1, telegram_id = $2, phone_number = $3, assigned_at = CURRENT_TIMESTAMP WHERE ticket_id = $4", user_id, target_id, phone, ticket_id)
     await DB.execute("INSERT INTO payments (user_id, telegram_id, ticket_id, ticket_number, extracted_amount, status, admin_notes) VALUES ($1, $2, $3, $4, 3000.0, 'approved', $5)", user_id, target_id, ticket_id, ticket_num, "Admin purchase")
     
@@ -1292,7 +1286,7 @@ async def admin_buy_ticket(message: Message, state: FSMContext):
     await message.answer(f"✅ Ticket #{ticket_num} assigned to user {target_id}!\n👤 {name}\n📱 {phone}", reply_markup=admin_kb(uid))
     
     try:
-        await bot.send_message(target_id, f"🎉 Admin purchased ticket #{ticket_num} for you!")
+        await tg_bot.send_message(target_id, f"🎉 Admin purchased ticket #{ticket_num} for you!")  # CHANGED: bot -> tg_bot
     except:
         pass
 
@@ -1342,7 +1336,7 @@ async def admin_manual_process(message: Message, state: FSMContext):
 # =====================================================
 
 async def set_commands():
-    await bot.set_my_commands([
+    await tg_bot.set_my_commands([  # CHANGED: bot -> tg_bot
         BotCommand(command="start", description="🏠 Start"),
         BotCommand(command="admin", description="🛠️ Admin"),
     ])
@@ -1353,7 +1347,7 @@ async def main():
     await set_commands()
     
     try:
-        await bot.delete_webhook(drop_pending_updates=True)
+        await tg_bot.delete_webhook(drop_pending_updates=True)  # CHANGED: bot -> tg_bot
     except:
         pass
     
@@ -1364,7 +1358,7 @@ async def main():
     logger.info(f"👤 Admins: {ADMIN_IDS}")
     logger.info(f"🌐 WebApp: {WEBAPP_URL}")
     
-    await dp.start_polling(bot, allowed_updates=["message", "callback_query"], skip_updates=True)
+    await dp.start_polling(tg_bot, allowed_updates=["message", "callback_query"], skip_updates=True)  # CHANGED: bot -> tg_bot
 
 if __name__ == "__main__":
     try:
