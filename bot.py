@@ -31,10 +31,11 @@ from aiogram.types import (
     BufferedInputFile, BotCommand, WebAppInfo
 )
 
-import aiosqlite
+# import aiosqlite
 from dotenv import load_dotenv
-from database import init_db, DB_NAME
-
+# from database import init_db, DB_NAME
+import asyncpg
+from asyncpg import Pool
 # =====================================================
 # ENV
 # =====================================================
@@ -48,6 +49,14 @@ ADMIN_IDS = [int(x.strip()) for x in admin_ids_raw.split(",") if x.strip()]
 
 if not TOKEN or not ADMIN_IDS:
     raise ValueError("BOT_TOKEN and ADMIN_IDS required!")
+
+# =====================================================
+# POSTGRESQL DATABASE URL
+# =====================================================
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://siket_ekub_user:TPgM4oBmNyD3WMR5slAdWXjA0lvn2vkH@dpg-da4ucgnqj5pc73b8bt5g-a/siket_ekub")
+
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL is missing! Required for PostgreSQL.")
 
 WEBAPP_URL = os.getenv("WEBAPP_URL", "https://siket-ekub-webapp.onrender.com")
 SUPPORT_CHANNEL_LINK = os.getenv("SUPPORT_CHANNEL_LINK", "https://t.me/siketekub")
@@ -63,58 +72,64 @@ dp = Dispatcher(storage=storage)
 router = Router()
 
 # =====================================================
-# DATABASE HELPER
+# DATABASE HELPER - POSTGRESQL VERSION
 # =====================================================
-DB_LOCK = Lock()
 
 class DatabaseHelper:
     @staticmethod
     async def execute(query: str, params: tuple = None):
-        with DB_LOCK:
-            async with aiosqlite.connect(DB_NAME) as db:
-                await db.execute("PRAGMA journal_mode=WAL;")
-                cursor = await db.execute(query, params or ())
-                await db.commit()
-                return cursor
+        pool = await get_db_pool()
+        async with pool.acquire() as conn:
+            if params:
+                return await conn.execute(query, *params)
+            return await conn.execute(query)
     
     @staticmethod
     async def execute_transaction(queries: list):
-        with DB_LOCK:
-            async with aiosqlite.connect(DB_NAME) as db:
-                await db.execute("PRAGMA journal_mode=WAL;")
-                try:
-                    await db.execute("BEGIN EXCLUSIVE")
-                    for query, params in queries:
-                        await db.execute(query, params or ())
-                    await db.commit()
-                    return True
-                except:
-                    await db.rollback()
-                    raise
+        pool = await get_db_pool()
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                for query, params in queries:
+                    if params:
+                        await conn.execute(query, *params)
+                    else:
+                        await conn.execute(query)
+                return True
     
     @staticmethod
     async def fetch(query: str, params: tuple = None):
-        with DB_LOCK:
-            async with aiosqlite.connect(DB_NAME) as db:
-                await db.execute("PRAGMA journal_mode=WAL;")
-                cursor = await db.execute(query, params or ())
-                return await cursor.fetchall()
+        pool = await get_db_pool()
+        async with pool.acquire() as conn:
+            if params:
+                return await conn.fetch(query, *params)
+            return await conn.fetch(query)
     
     @staticmethod
     async def fetch_one(query: str, params: tuple = None):
-        with DB_LOCK:
-            async with aiosqlite.connect(DB_NAME) as db:
-                await db.execute("PRAGMA journal_mode=WAL;")
-                cursor = await db.execute(query, params or ())
-                return await cursor.fetchone()
+        pool = await get_db_pool()
+        async with pool.acquire() as conn:
+            if params:
+                return await conn.fetchrow(query, *params)
+            return await conn.fetchrow(query)
+    
+    @staticmethod
+    async def fetch_val(query: str, params: tuple = None):
+        """Fetch a single value"""
+        pool = await get_db_pool()
+        async with pool.acquire() as conn:
+            if params:
+                row = await conn.fetchrow(query, *params)
+            else:
+                row = await conn.fetchrow(query)
+            return row[0] if row else None
     
     @staticmethod
     async def executemany(query: str, params_list: list):
-        with DB_LOCK:
-            async with aiosqlite.connect(DB_NAME) as db:
-                await db.execute("PRAGMA journal_mode=WAL;")
-                await db.executemany(query, params_list)
-                await db.commit()
+        pool = await get_db_pool()
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                for params in params_list:
+                    await conn.execute(query, *params)
 
 # =====================================================
 # LANGUAGE CACHE
@@ -1522,10 +1537,10 @@ async def set_commands():
     ])
 
 async def main():
-    await init_db()
+    await init_db_postgres()
     await set_commands()
     dp.include_router(router)
-    logger.info("🚀 Bot started!")
+    logger.info("🚀 Bot started with PostgreSQL!")
     logger.info(f"👤 Admins: {ADMIN_IDS}")
     logger.info(f"🌐 WebApp: {WEBAPP_URL}")
     await dp.start_polling(bot)
