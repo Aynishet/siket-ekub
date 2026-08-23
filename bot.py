@@ -821,16 +821,16 @@ class AdminUserStates(StatesGroup):
 # START COMMAND - CHOICE MENU UNDER INPUT TEXT
 # =====================================================
 
-@router.message(Command("start"))
-async def cmd_start(message: Message, state: FSMContext):
-    """Start command - show choice menu as reply keyboard under input"""
-    await state.clear()
-    uid = message.from_user.id
+# @router.message(Command("start"))
+# async def cmd_start(message: Message, state: FSMContext):
+#     """Start command - show choice menu as reply keyboard under input"""
+#     await state.clear()
+#     uid = message.from_user.id
     
-    # Get webapp URL from environment
-    webapp_url = os.getenv("WEBAPP_URL", "https://siket-ekub-webapp.onrender.com")
+#     # Get webapp URL from environment
+#     webapp_url = os.getenv("WEBAPP_URL", "https://siket-ekub-webapp.onrender.com")
     
-    # Create choice menu as ReplyKeyboardMarkup (appears under input text)
+#     # Create choice menu as ReplyKeyboardMarkup (appears under input text)
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
     """Start command - show choice menu in Amharic"""
