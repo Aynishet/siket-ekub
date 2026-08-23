@@ -37,7 +37,6 @@ from dotenv import load_dotenv
 import asyncpg
 from asyncpg import Pool
 # =====================================================
-# =====================================================
 # ENV
 # =====================================================
 ssl._create_default_https_context = ssl._create_unverified_context
@@ -50,7 +49,6 @@ ADMIN_IDS = [int(x.strip()) for x in admin_ids_raw.split(",") if x.strip()]
 
 if not TOKEN or not ADMIN_IDS:
     raise ValueError("BOT_TOKEN and ADMIN_IDS required!")
-
 # =====================================================
 # POSTGRESQL DATABASE URL
 # =====================================================
@@ -64,13 +62,20 @@ SUPPORT_CHANNEL_LINK = os.getenv("SUPPORT_CHANNEL_LINK", "https://t.me/siketekub
 TICKET_CHANNEL_LINK = os.getenv("TICKET_CHANNEL_LINK", "https://t.me/siketekubtiketo")
 TICKET_CHANNEL_ID = os.getenv("TICKET_CHANNEL_ID", "@siketekubtiketo")
 
+# =====================================================
+# LOGGING
+# =====================================================
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
+# =====================================================
+# BOT INITIALIZATION - MUST BE DEFINED BEFORE @router DECORATORS
+# =====================================================
 storage = MemoryStorage()
 bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=storage)
-router = Router()
+router = Router()  # <-- CRITICAL: router must be defined here
+
 
 # =====================================================
 # POSTGRESQL CONNECTION AND INITIALIZATION
