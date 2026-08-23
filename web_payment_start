@@ -1,6 +1,7 @@
 # =====================================================
 # BOT.PY - SIKET EKUB LOTTERY BOT
 # COMPLETE PRODUCTION BOT - ALL FEATURES WORKING
+# No Game Creation/Selection - 20000 Tickets Auto-Generated
 # =====================================================
 
 import sys
@@ -19,7 +20,7 @@ if sys.platform == "win32":
     sys.stdout.reconfigure(encoding='utf-8')
     sys.stderr.reconfigure(encoding='utf-8')
 
-from aiogram import Dispatcher, F, Router
+from aiogram import Bot, Dispatcher, F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -94,27 +95,14 @@ async def init_db():
             )
         """)
         await conn.execute("""
-            CREATE TABLE IF NOT EXISTS ticket_types (
-                type_id SERIAL PRIMARY KEY,
-                name VARCHAR(255) NOT NULL,
-                price DECIMAL(15,2) NOT NULL,
-                total_slots INTEGER NOT NULL,
-                prizes TEXT,
-                is_active BOOLEAN DEFAULT TRUE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        await conn.execute("""
             CREATE TABLE IF NOT EXISTS tickets (
                 ticket_id SERIAL PRIMARY KEY,
-                type_id INTEGER REFERENCES ticket_types(type_id),
-                ticket_number INTEGER NOT NULL,
+                ticket_number INTEGER UNIQUE NOT NULL,
                 status VARCHAR(20) DEFAULT 'available',
                 user_id INTEGER REFERENCES users(user_id),
                 telegram_id BIGINT,
                 phone_number VARCHAR(20),
-                assigned_at TIMESTAMP,
-                UNIQUE(type_id, ticket_number)
+                assigned_at TIMESTAMP
             )
         """)
         await conn.execute("""
@@ -151,7 +139,25 @@ async def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status)")
         logger.info("✅ Database tables ready")
+
+async def generate_tickets():
+    """Generate 20000 tickets if they don't exist"""
+    count = await DB.fetch_one("SELECT COUNT(*) FROM tickets")
+    if count and count[0] > 0:
+        logger.info(f"✅ {count[0]} tickets already exist")
+        return
+    
+    logger.info("🎫 Generating 20000 tickets...")
+    batch_size = 1000
+    for start in range(1, 20001, batch_size):
+        end = min(start + batch_size - 1, 20000)
+        for i in range(start, end + 1):
+            await DB.execute("INSERT INTO tickets (ticket_number, status) VALUES ($1, 'available')", i)
+        logger.info(f"✅ Generated tickets {start}-{end}")
+    logger.info("✅ All 20000 tickets generated")
 
 class DB:
     @staticmethod
@@ -219,14 +225,13 @@ TEXTS = {
         "pay_submitted": "✅ Payment sent! Waiting for admin.",
         "pay_approved": "✅ Ticket #{ticket} approved!",
         "pay_rejected": "❌ Payment rejected.",
-        "no_tickets": "📭 No tickets yet.",
+        "no_tickets": "📭 No tickets available.",
         "prize_list": "🏆 10 PRIZES:\n1st: BWD Leopard 3 (8M ETB)\n2nd: Hyundai Bayon (5M ETB)\n3rd: Shop Space (4M ETB)\n4th-7th: 1M ETB each\n8th: 500K ETB\n9th: 300K ETB\n10th: 200K ETB",
         "balance_info": "💰 Balance: {balance} ETB\n🎫 Tickets: {tickets}\n💸 Spent: {spent} ETB",
         "admin": "🛠️ Admin",
-        "verify": "✅ Verify",
-        "create": "📝 Create Game",
+        "verify": "✅ Verify Payments",
         "users": "👤 Users",
-        "refund": "🔄 Refund",
+        "refund": "🔄 Refunds",
         "broadcast": "📢 Broadcast",
         "reports": "📊 Reports",
         "buy_for_user": "🎯 Buy for User",
@@ -237,7 +242,6 @@ TEXTS = {
         "refund_all": "✅ Refunded {total} ETB to {count} users.",
         "no_refund": "✅ No users with balance.",
         "broadcast_sent": "✅ Sent to {sent}/{total} users.",
-        "game_created": "✅ Game '{name}' with {slots} tickets!",
         "support_info": "💬 Support: {channel}",
         "your_tickets": "🎫 Your tickets:\n",
         "choose_interface": "🎰 Choose how to play:",
@@ -255,8 +259,9 @@ TEXTS = {
         "no_users": "📭 No users found.",
         "web_loaded": "🌐 Web Interface Loaded!\n👤 User: {user}\n📱 Phone: {phone}\n💰 Balance: {balance} ETB",
         "already_registered": "✅ You are already registered!\n\nChoose how to play:",
-        "no_active_game": "❌ No active game. Contact admin.",
         "registration": "🌍 **Welcome!**\n\nPlease choose your language to register:",
+        "total_tickets": "📊 Total Tickets: {total}\n🎫 Available: {available}\n💰 Sold: {sold}",
+        "admin_reports": "📊 System Reports",
     },
     "am": {
         "welcome": "🎰 እንኳን ወደ ሲኬት ዕቁብ በደህና መጡ!",
@@ -279,12 +284,11 @@ TEXTS = {
         "pay_submitted": "✅ ክፍያ ተልኳል! እየተጠበቀ ነው።",
         "pay_approved": "✅ ቲኬት #{ticket} ጸድቋል!",
         "pay_rejected": "❌ ክፍያ ውድቅ ተደርጓል።",
-        "no_tickets": "📭 ምንም ቲኬት የለም።",
+        "no_tickets": "📭 ምንም ቲኬት አልተገኘም።",
         "prize_list": "🏆 10 ሽልማቶች:\n1ኛ: BWD Leopard 3 (8M ብር)\n2ኛ: Hyundai Bayon (5M ብር)\n3ኛ: የሱቅ ቦታ (4M ብር)\n4ኛ-7ኛ: 1M ብር\n8ኛ: 500K ብር\n9ኛ: 300K ብር\n10ኛ: 200K ብር",
         "balance_info": "💰 ቀሪ: {balance} ብር\n🎫 ቲኬቶች: {tickets}\n💸 አጠቃላይ: {spent} ብር",
         "admin": "🛠️ አስተዳዳሪ",
-        "verify": "✅ አረጋግጥ",
-        "create": "📝 ጨዋታ ፍጠር",
+        "verify": "✅ ክፍያዎችን አረጋግጥ",
         "users": "👤 ተጠቃሚዎች",
         "refund": "🔄 መመለስ",
         "broadcast": "📢 ማስታወቂያ",
@@ -297,7 +301,6 @@ TEXTS = {
         "refund_all": "✅ {total} ብር ለ {count} ተጠቃሚዎች ተመልሷል።",
         "no_refund": "✅ ቀሪ ያላቸው ተጠቃሚዎች የሉም።",
         "broadcast_sent": "✅ ለ {sent}/{total} ተልኳል።",
-        "game_created": "✅ '{name}' ጨዋታ በ {slots} ቲኬቶች ተፈጥሯል!",
         "support_info": "💬 ድጋፍ: {channel}",
         "your_tickets": "🎫 ቲኬቶችዎ:\n",
         "choose_interface": "🎰 እንዴት መጫወት ይፈልጋሉ?",
@@ -315,8 +318,9 @@ TEXTS = {
         "no_users": "📭 ምንም ተጠቃሚ የለም።",
         "web_loaded": "🌐 የድር በይነገጽ ተጭኗል!\n👤 ተጠቃሚ: {user}\n📱 ስልክ: {phone}\n💰 ቀሪ: {balance} ብር",
         "already_registered": "✅ አስቀድመው ተመዝግበዋል!\n\nእንዴት መጫወት ይፈልጋሉ?",
-        "no_active_game": "❌ ምንም ንቁ ጨዋታ የለም። አስተዳዳሪን ያግኙ።",
         "registration": "🌍 **እንኳን ደህና መጡ!**\n\nእባክዎ ለመመዝገብ ቋንቋዎን ይምረጡ:",
+        "total_tickets": "📊 አጠቃላይ ቲኬቶች: {total}\n🎫 የሚገኙ: {available}\n💰 የተሸጡ: {sold}",
+        "admin_reports": "📊 የስርዓት ሪፖርቶች",
     }
 }
 
@@ -326,7 +330,7 @@ def text(user_id: int, key: str, **kwargs) -> str:
     return t.format(**kwargs) if kwargs else t
 
 # =====================================================
-# KEYBOARDS (All under input)
+# KEYBOARDS
 # =====================================================
 
 def choice_kb():
@@ -364,11 +368,10 @@ def admin_kb(uid: int):
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="🛠️ Admin Panel")],
-            [KeyboardButton(text=text(uid, "verify")), KeyboardButton(text=text(uid, "create"))],
-            [KeyboardButton(text=text(uid, "users")), KeyboardButton(text=text(uid, "refund"))],
-            [KeyboardButton(text=text(uid, "broadcast")), KeyboardButton(text=text(uid, "reports"))],
-            [KeyboardButton(text=text(uid, "buy_for_user")), KeyboardButton(text=text(uid, "manual_ticket"))],
-            [KeyboardButton(text=text(uid, "back_user"))],
+            [KeyboardButton(text=text(uid, "verify")), KeyboardButton(text=text(uid, "users"))],
+            [KeyboardButton(text=text(uid, "refund")), KeyboardButton(text=text(uid, "broadcast"))],
+            [KeyboardButton(text=text(uid, "reports")), KeyboardButton(text=text(uid, "buy_for_user"))],
+            [KeyboardButton(text=text(uid, "manual_ticket")), KeyboardButton(text=text(uid, "back_user"))],
         ],
         resize_keyboard=True
     )
@@ -385,13 +388,12 @@ class BuyState(StatesGroup):
     payment = State()
 
 class AdminState(StatesGroup):
-    game_name = State()
-    game_prizes = State()
-    game_slots = State()
     broadcast_msg = State()
     buy_user_id = State()
     buy_ticket_num = State()
     manual_ticket = State()
+    refund_user_id = State()
+    refund_reason = State()
 
 # =====================================================
 # HELPERS
@@ -400,36 +402,30 @@ class AdminState(StatesGroup):
 async def get_user(tid: int):
     return await DB.fetch_one("SELECT * FROM users WHERE telegram_id = $1", tid)
 
-async def get_active_game():
-    return await DB.fetch_one("SELECT type_id FROM ticket_types WHERE is_active = true LIMIT 1")
-
-async def get_available_ticket(type_id: int):
+async def get_available_ticket():
     return await DB.fetch_one(
-        "SELECT ticket_id, ticket_number FROM tickets WHERE type_id = $1 AND status = 'available' LIMIT 1",
-        type_id
+        "SELECT ticket_id, ticket_number FROM tickets WHERE status = 'available' LIMIT 1"
     )
 
-async def get_ticket_by_number(type_id: int, num: int):
+async def get_ticket_by_number(num: int):
     return await DB.fetch_one(
-        "SELECT ticket_id FROM tickets WHERE type_id = $1 AND ticket_number = $2 AND status = 'available'",
-        type_id, num
+        "SELECT ticket_id FROM tickets WHERE ticket_number = $1 AND status = 'available'",
+        num
     )
 
-async def get_tickets_in_block(type_id: int, start: int, end: int):
+async def get_tickets_in_block(start: int, end: int):
     return await DB.fetch(
-        "SELECT ticket_id, ticket_number FROM tickets WHERE type_id = $1 AND ticket_number BETWEEN $2 AND $3 AND status = 'available'",
-        type_id, start, end
+        "SELECT ticket_id, ticket_number FROM tickets WHERE ticket_number BETWEEN $1 AND $2 AND status = 'available'",
+        start, end
     )
 
 async def lock_ticket(ticket_id: int, user_id: int, telegram_id: int, phone: str):
-    """Lock ticket as pending (prevents double purchase)"""
     return await DB.execute(
         "UPDATE tickets SET status = 'pending', user_id = $1, telegram_id = $2, phone_number = $3 WHERE ticket_id = $4 AND status = 'available'",
         user_id, telegram_id, phone, ticket_id
     )
 
 async def assign_ticket(ticket_id: int, user_id: int, telegram_id: int, phone: str):
-    """Assign ticket as sold"""
     return await DB.execute(
         "UPDATE tickets SET status = 'sold', user_id = $1, telegram_id = $2, phone_number = $3, assigned_at = CURRENT_TIMESTAMP WHERE ticket_id = $4 AND status = 'pending'",
         user_id, telegram_id, phone, ticket_id
@@ -505,7 +501,7 @@ async def reg_address(message: Message, state: FSMContext):
     await message.answer(f"✅ {text(uid, 'registered')}", reply_markup=choice_kb())
 
 # =====================================================
-# LANGUAGE TOGGLE (NO REGISTRATION)
+# LANGUAGE TOGGLE
 # =====================================================
 
 @router.message(F.text.in_(["🌍 Language", "🌍 ቋንቋ"]))
@@ -584,7 +580,7 @@ async def about(message: Message):
     )
 
 # =====================================================
-# BUY TICKET - CATCH ALL (WORKS EVERY TIME)
+# BUY TICKET - CATCH ALL
 # =====================================================
 
 @router.message(F.text)
@@ -593,16 +589,13 @@ async def buy_ticket_handler(message: Message, state: FSMContext):
     text_msg = message.text or ""
     uid = message.from_user.id
     
-    # Skip if user is in registration
     current_state = await state.get_state()
     if current_state in [RegState.phone.state, RegState.address.state]:
         return
     
-    # Skip if this is a number (ticket input)
     if text_msg.strip().isdigit():
         return
     
-    # Check if this is a Buy Ticket request
     buy_triggers = ["🎯 Buy Ticket", "🎯 ቲኬት ግዛ", "Buy Ticket", "ቲኬት", "ግዛ", "buy", "ticket"]
     is_buy = any(trigger in text_msg for trigger in buy_triggers)
     
@@ -615,12 +608,6 @@ async def buy_ticket_handler(message: Message, state: FSMContext):
         await message.answer("❌ Please /start first.")
         return
     
-    game = await get_active_game()
-    if not game:
-        await message.answer(text(uid, "no_active_game"), reply_markup=user_kb(uid))
-        return
-    
-    await state.update_data(game_id=game[0])
     await message.answer(text(uid, "pick_ticket"), reply_markup=buy_kb(uid))
 
 # =====================================================
@@ -630,18 +617,8 @@ async def buy_ticket_handler(message: Message, state: FSMContext):
 @router.message(F.text.in_(["🎲 Random", "🎲 በዘፈቀደ"]))
 async def random_ticket(message: Message, state: FSMContext):
     uid = message.from_user.id
-    data = await state.get_data()
-    type_id = data.get("game_id")
     
-    if not type_id:
-        game = await get_active_game()
-        if not game:
-            await message.answer("❌ No active game.", reply_markup=user_kb(uid))
-            return
-        type_id = game[0]
-        await state.update_data(game_id=type_id)
-    
-    ticket = await get_available_ticket(type_id)
+    ticket = await get_available_ticket()
     if not ticket:
         await message.answer(text(uid, "no_tickets"), reply_markup=buy_kb(uid))
         return
@@ -679,17 +656,7 @@ async def process_ticket_number(message: Message, state: FSMContext):
         await message.answer(text(uid, "invalid_number"))
         return
     
-    data = await state.get_data()
-    type_id = data.get("game_id")
-    if not type_id:
-        game = await get_active_game()
-        if not game:
-            await message.answer("❌ No active game.", reply_markup=user_kb(uid))
-            return
-        type_id = game[0]
-        await state.update_data(game_id=type_id)
-    
-    ticket = await get_ticket_by_number(type_id, ticket_num)
+    ticket = await get_ticket_by_number(ticket_num)
     if not ticket:
         await message.answer(text(uid, "ticket_not_found"))
         return
@@ -724,18 +691,8 @@ async def choose_block(message: Message, state: FSMContext):
 async def process_block(message: Message, state: FSMContext):
     uid = message.from_user.id
     start, end = map(int, message.text.split('-'))
-    data = await state.get_data()
-    type_id = data.get("game_id")
     
-    if not type_id:
-        game = await get_active_game()
-        if not game:
-            await message.answer("❌ No active game.", reply_markup=user_kb(uid))
-            return
-        type_id = game[0]
-        await state.update_data(game_id=type_id)
-    
-    tickets = await get_tickets_in_block(type_id, start, end)
+    tickets = await get_tickets_in_block(start, end)
     if not tickets:
         kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text=text(uid, "back"))]], resize_keyboard=True)
         await message.answer("❌ No tickets available in this block.", reply_markup=kb)
@@ -759,7 +716,7 @@ async def process_block(message: Message, state: FSMContext):
     await state.set_state(BuyState.block)
 
 # =====================================================
-# PAYMENT - LOCKS TICKET AS PENDING
+# PAYMENT - LOCKS TICKET
 # =====================================================
 
 @router.message(BuyState.payment, F.photo | F.text)
@@ -785,7 +742,9 @@ async def process_payment(message: Message, state: FSMContext):
         await message.answer("❌ Please /start first.")
         return
     
-    user_id, phone, name = user[0], user[3] or "N/A", user[2] or "User"
+    user_id = user[0]
+    phone = user[3] or "N/A"
+    name = user[2] or "User"
     
     # LOCK THE TICKET - Prevent double purchase
     locked = await lock_ticket(ticket_id, user_id, uid, phone)
@@ -829,7 +788,7 @@ async def process_payment(message: Message, state: FSMContext):
             pass
 
 # =====================================================
-# APPROVE PAYMENT - ASSIGNS TICKET
+# APPROVE PAYMENT
 # =====================================================
 
 @router.callback_query(F.data.startswith("approve_"))
@@ -850,14 +809,15 @@ async def approve_pay(callback: CallbackQuery):
     
     tg_id, ticket_id, ticket_num = payment
     
-    # Assign the ticket (status must be 'pending')
     user = await get_user(tg_id)
     if not user:
         await callback.answer("❌ User not found!", show_alert=True)
         return
     
-    user_id, phone = user[0], user[3] or "N/A"
+    user_id = user[0]
+    phone = user[3] or "N/A"
     
+    # Assign the ticket (status must be 'pending')
     assigned = await assign_ticket(ticket_id, user_id, tg_id, phone)
     
     if "UPDATE 0" in str(assigned):
@@ -886,6 +846,10 @@ async def approve_pay(callback: CallbackQuery):
     
     await callback.message.edit_text(f"✅ Payment #{payment_id} approved!\n🎫 Ticket #{ticket_num}")
     await callback.answer()
+
+# =====================================================
+# REJECT PAYMENT
+# =====================================================
 
 @router.callback_query(F.data.startswith("reject_"))
 async def reject_pay(callback: CallbackQuery):
@@ -987,10 +951,10 @@ async def admin_cmd(message: Message):
     await message.answer(text(uid, "admin_panel"), reply_markup=admin_kb(uid))
 
 # =====================================================
-# ADMIN: VERIFY
+# ADMIN: VERIFY PAYMENTS
 # =====================================================
 
-@router.message(F.text.in_(["✅ Verify", "✅ አረጋግጥ"]))
+@router.message(F.text.in_(["✅ Verify Payments", "✅ ክፍያዎችን አረጋግጥ"]))
 async def admin_verify(message: Message):
     uid = message.from_user.id
     if uid not in ADMIN_IDS:
@@ -1028,17 +992,17 @@ async def view_payment(callback: CallbackQuery):
         [InlineKeyboardButton(text="🔙 Back", callback_data="admin_verify")]
     ])
     
-    text_msg = f"🔍 Payment #{payment_id}\n🎫 Ticket: #{ticket_num}\n👤 User: {tg_id}"
+    msg = f"🔍 Payment #{payment_id}\n🎫 Ticket: #{ticket_num}\n👤 User: {tg_id}"
     
     if screenshot:
         try:
             img = base64.b64decode(screenshot)
-            await callback.message.answer_photo(BufferedInputFile(img, filename="payment.jpg"), caption=text_msg, reply_markup=kb)
+            await callback.message.answer_photo(BufferedInputFile(img, filename="payment.jpg"), caption=msg, reply_markup=kb)
             await callback.message.delete()
         except:
-            await callback.message.edit_text(text_msg + "\n\n📸 Screenshot attached", reply_markup=kb)
+            await callback.message.edit_text(msg + "\n\n📸 Screenshot attached", reply_markup=kb)
     else:
-        await callback.message.edit_text(text_msg, reply_markup=kb)
+        await callback.message.edit_text(msg, reply_markup=kb)
     await callback.answer()
 
 @router.callback_query(F.data == "admin_back")
@@ -1070,78 +1034,10 @@ async def admin_users(message: Message):
     await message.answer("\n".join(lines[:15]), reply_markup=admin_kb(uid), parse_mode="Markdown")
 
 # =====================================================
-# ADMIN: CREATE GAME (GENERATES 20000 TICKETS)
-# =====================================================
-
-@router.message(F.text.in_(["📝 Create Game", "📝 ጨዋታ ፍጠር"]))
-async def admin_create_game(message: Message, state: FSMContext):
-    uid = message.from_user.id
-    if uid not in ADMIN_IDS:
-        return
-    
-    await message.answer("📝 Enter game name:", reply_markup=ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="🔙 Back to User")]], resize_keyboard=True
-    ))
-    await state.set_state(AdminState.game_name)
-
-@router.message(AdminState.game_name, F.text)
-async def create_game_name(message: Message, state: FSMContext):
-    uid = message.from_user.id
-    if uid not in ADMIN_IDS:
-        return
-    if message.text == "🔙 Back to User":
-        await back_to_user(message); await state.clear(); return
-    
-    await state.update_data(name=message.text)
-    await message.answer("📝 Enter prizes (one per line):\n1st: Prize 1\n2nd: Prize 2\n...")
-    await state.set_state(AdminState.game_prizes)
-
-@router.message(AdminState.game_prizes, F.text)
-async def create_game_prizes(message: Message, state: FSMContext):
-    uid = message.from_user.id
-    if uid not in ADMIN_IDS:
-        return
-    await state.update_data(prizes=message.text)
-    await message.answer("📝 Enter total slots (default: 20000):")
-    await state.set_state(AdminState.game_slots)
-
-@router.message(AdminState.game_slots, F.text)
-async def create_game_slots(message: Message, state: FSMContext):
-    uid = message.from_user.id
-    if uid not in ADMIN_IDS:
-        return
-    
-    try:
-        slots = int(message.text.strip()) or 20000
-    except:
-        slots = 20000
-    
-    data = await state.get_data()
-    name, prizes = data.get("name"), data.get("prizes")
-    
-    result = await DB.execute(
-        "INSERT INTO ticket_types (name, price, total_slots, is_active, prizes) VALUES ($1, 3000, $2, true, $3) RETURNING type_id",
-        name, slots, prizes
-    )
-    type_id = result[0] if result else None
-    
-    # Generate 20000 tickets in batches of 1000
-    logger.info(f"🎫 Generating {slots} tickets for '{name}'...")
-    batch_size = 1000
-    for start in range(1, slots + 1, batch_size):
-        end = min(start + batch_size - 1, slots)
-        for i in range(start, end + 1):
-            await DB.execute("INSERT INTO tickets (type_id, ticket_number, status) VALUES ($1, $2, 'available')", type_id, i)
-        logger.info(f"✅ Generated tickets {start}-{end}")
-    
-    await state.clear()
-    await message.answer(text(uid, "game_created", name=name, slots=slots), reply_markup=admin_kb(uid))
-
-# =====================================================
 # ADMIN: REFUND
 # =====================================================
 
-@router.message(F.text.in_(["🔄 Refund", "🔄 መመለስ"]))
+@router.message(F.text.in_(["🔄 Refunds", "🔄 መመለስ"]))
 async def admin_refund(message: Message):
     uid = message.from_user.id
     if uid not in ADMIN_IDS:
@@ -1241,7 +1137,9 @@ async def send_broadcast(message: Message, state: FSMContext):
         return
     
     if message.text == "🔙 Back to User":
-        await back_to_user(message); await state.clear(); return
+        await back_to_user(message)
+        await state.clear()
+        return
     
     users = await DB.fetch("SELECT telegram_id FROM users")
     if not users:
@@ -1249,11 +1147,11 @@ async def send_broadcast(message: Message, state: FSMContext):
         await state.clear()
         return
     
-    text_msg = message.text
+    msg = message.text
     sent = 0
     for user in users:
         try:
-            await bot.send_message(user[0], f"📢 {text_msg}")
+            await bot.send_message(user[0], f"📢 {msg}")
             sent += 1
             await asyncio.sleep(0.05)
         except:
@@ -1272,15 +1170,17 @@ async def admin_reports(message: Message):
     if uid not in ADMIN_IDS:
         return
     
+    total = await DB.fetch_one("SELECT COUNT(*) FROM tickets")
+    available = await DB.fetch_one("SELECT COUNT(*) FROM tickets WHERE status = 'available'")
+    sold = await DB.fetch_one("SELECT COUNT(*) FROM tickets WHERE status = 'sold'")
     total_users = await DB.fetch_one("SELECT COUNT(*) FROM users")
-    total_tickets = await DB.fetch_one("SELECT COUNT(*) FROM tickets WHERE status = 'sold'")
     total_revenue = await DB.fetch_one("SELECT SUM(total_spent) FROM users")
     pending = await DB.fetch_one("SELECT COUNT(*) FROM payments WHERE status = 'pending'")
     
     text_msg = (
-        f"📊 **Reports**\n\n"
+        f"📊 **{text(uid, 'admin_reports')}**\n\n"
         f"👤 Users: {total_users[0] or 0}\n"
-        f"🎫 Sold: {total_tickets[0] or 0}\n"
+        f"📊 {text(uid, 'total_tickets', total=total[0] or 0, available=available[0] or 0, sold=sold[0] or 0)}\n"
         f"💰 Revenue: {total_revenue[0] or 0:,.0f} ETB\n"
         f"⏳ Pending: {pending[0] or 0}"
     )
@@ -1330,7 +1230,9 @@ async def admin_buy_user_id(message: Message, state: FSMContext):
         return
     
     if message.text == "🔙 Back to User":
-        await back_to_user(message); await state.clear(); return
+        await back_to_user(message)
+        await state.clear()
+        return
     
     try:
         target_id = int(message.text.strip())
@@ -1378,9 +1280,11 @@ async def admin_buy_ticket(message: Message, state: FSMContext):
         await message.answer("❌ User not found!")
         return
     
-    user_id, phone, name = user[0], user[3] or "N/A", user[2] or "User"
+    user_id = user[0]
+    phone = user[3] or "N/A"
+    name = user[2] or "User"
     
-    # Lock and assign
+    # Assign directly (admin bypasses pending)
     await DB.execute("UPDATE tickets SET status = 'sold', user_id = $1, telegram_id = $2, phone_number = $3, assigned_at = CURRENT_TIMESTAMP WHERE ticket_id = $4", user_id, target_id, phone, ticket_id)
     await DB.execute("INSERT INTO payments (user_id, telegram_id, ticket_id, ticket_number, extracted_amount, status, admin_notes) VALUES ($1, $2, $3, $4, 3000.0, 'approved', $5)", user_id, target_id, ticket_id, ticket_num, "Admin purchase")
     
@@ -1414,7 +1318,9 @@ async def admin_manual_process(message: Message, state: FSMContext):
         return
     
     if message.text == "🔙 Back to User":
-        await back_to_user(message); await state.clear(); return
+        await back_to_user(message)
+        await state.clear()
+        return
     
     try:
         num = int(message.text.strip())
@@ -1443,6 +1349,7 @@ async def set_commands():
 
 async def main():
     await init_db()
+    await generate_tickets()
     await set_commands()
     
     try:
