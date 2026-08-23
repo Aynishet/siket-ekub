@@ -1,8 +1,7 @@
 # =====================================================
 # BOT.PY - SIKET EKUB LOTTERY BOT
 # Complete working version with PostgreSQL
-# Ticket blocks: 50 tickets per block
-# All menus responsive (English + Amharic)
+# Registration flow fixed: User registers ONCE, permanent
 # =====================================================
 
 import sys
@@ -70,7 +69,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # =====================================================
-# BOT INITIALIZATION - MUST BE DEFINED BEFORE @router DECORATORS
+# BOT INITIALIZATION
 # =====================================================
 storage = MemoryStorage()
 bot = Bot(token=TOKEN)
@@ -101,7 +100,6 @@ async def init_db_postgres():
     pool = await get_db_pool()
     
     async with pool.acquire() as conn:
-        # Users table
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 user_id SERIAL PRIMARY KEY,
@@ -117,7 +115,6 @@ async def init_db_postgres():
             )
         """)
         
-        # Ticket types table
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS ticket_types (
                 type_id SERIAL PRIMARY KEY,
@@ -130,7 +127,6 @@ async def init_db_postgres():
             )
         """)
         
-        # Tickets table
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS tickets (
                 ticket_id SERIAL PRIMARY KEY,
@@ -145,7 +141,6 @@ async def init_db_postgres():
             )
         """)
         
-        # Payments table
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS payments (
                 payment_id SERIAL PRIMARY KEY,
@@ -167,7 +162,6 @@ async def init_db_postgres():
             )
         """)
         
-        # Refunds table
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS refunds (
                 refund_id SERIAL PRIMARY KEY,
@@ -183,7 +177,6 @@ async def init_db_postgres():
             )
         """)
         
-        # Create indexes for performance
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_tickets_telegram_id ON tickets(telegram_id)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status)")
@@ -234,7 +227,6 @@ class DatabaseHelper:
     
     @staticmethod
     async def fetch_val(query: str, *params):
-        """Fetch a single value"""
         pool = await get_db_pool()
         async with pool.acquire() as conn:
             if params:
@@ -283,7 +275,7 @@ TEXTS = {
         "lang": "🌍 Language",
         "reg_phone": "📱 Share Phone",
         "reg_address": "📍 Enter your address:",
-        "registered": "✅ Registered!",
+        "registered": "✅ Registration complete! You can now buy tickets.",
         "pick_ticket": "🎫 Choose ticket:",
         "random_pick": "🎲 Random",
         "type_number": "✏️ Type Number",
@@ -340,7 +332,7 @@ TEXTS = {
         "lang": "🌍 ቋንቋ",
         "reg_phone": "📱 ስልክ አጋሩ",
         "reg_address": "📍 አድራሻ አስገባ:",
-        "registered": "✅ ተመዝግበዋል!",
+        "registered": "✅ ምዝገባ ተጠናቋል! አሁን ቲኬት መግዛት ይችላሉ።",
         "pick_ticket": "🎫 ቲኬት ምረጥ:",
         "random_pick": "🎲 በዘፈቀደ",
         "type_number": "✏️ ቁጥር ጻፍ",
@@ -462,7 +454,8 @@ class AdminState(StatesGroup):
     manual_ticket = State()
 
 # =====================================================
-# START
+# =====================================================
+# START COMMAND - FIXED: Check user first
 # =====================================================
 
 @router.message(Command("start"))
@@ -470,9 +463,11 @@ async def start_cmd(message: Message, state: FSMContext):
     uid = message.from_user.id
     await state.clear()
     
+    # CHECK IF USER EXISTS FIRST
     user = await DatabaseHelper.fetch_one("SELECT * FROM users WHERE telegram_id = $1", uid)
     
     if user:
+        # User exists - set language and show choice menu
         lang = user[8] if len(user) > 8 else "en"
         LangCache.set(uid, lang)
         await message.answer(
@@ -482,6 +477,7 @@ async def start_cmd(message: Message, state: FSMContext):
         )
         return
     
+    # NEW USER - Show language selection FIRST
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🇬🇧 English", callback_data="lang_en")],
         [InlineKeyboardButton(text="🇪🇹 አማርኛ", callback_data="lang_am")],
@@ -493,7 +489,7 @@ async def start_cmd(message: Message, state: FSMContext):
     )
 
 # =====================================================
-# LANGUAGE
+# LANGUAGE SELECTION - NEW USER REGISTRATION
 # =====================================================
 
 @router.callback_query(F.data.startswith("lang_"))
@@ -535,6 +531,7 @@ async def reg_address(message: Message, state: FSMContext):
     address = message.text
     lang = LangCache.get(uid)
     
+    # INSERT USER - This is the ONLY place user is created
     await DatabaseHelper.execute(
         "INSERT INTO users (telegram_id, phone_number, address, language) VALUES ($1, $2, $3, $4)",
         uid, phone, address, lang
@@ -547,7 +544,47 @@ async def reg_address(message: Message, state: FSMContext):
     )
 
 # =====================================================
-# CHOICE MENU
+# LANGUAGE TOGGLE - FOR EXISTING USERS ONLY
+# =====================================================
+
+@router.message(F.text.in_(["🌍 Language", "🌍 ቋንቋ"]))
+async def lang_toggle(message: Message):
+    uid = message.from_user.id
+    
+    # Check if user exists
+    user = await DatabaseHelper.fetch_one("SELECT * FROM users WHERE telegram_id = $1", uid)
+    if not user:
+        await message.answer("❌ Please /start first.")
+        return
+    
+    # Show language selection (just toggles language, NO registration)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🇬🇧 English", callback_data="toggle_lang_en")],
+        [InlineKeyboardButton(text="🇪🇹 አማርኛ", callback_data="toggle_lang_am")],
+    ])
+    await message.answer(get_text(uid, "choose_lang"), reply_markup=kb)
+
+@router.callback_query(F.data.startswith("toggle_lang_"))
+async def toggle_lang(callback: CallbackQuery):
+    uid = callback.from_user.id
+    lang = callback.data.split("_")[2]
+    
+    # Update language in database
+    await DatabaseHelper.execute(
+        "UPDATE users SET language = $1 WHERE telegram_id = $2",
+        lang, uid
+    )
+    LangCache.set(uid, lang)
+    
+    await callback.message.delete()
+    await callback.message.answer(
+        get_text(uid, "lang_changed"),
+        reply_markup=user_menu(uid)
+    )
+    await callback.answer()
+
+# =====================================================
+# CHOICE MENU - "🤖 Use Telegram"
 # =====================================================
 
 @router.message(F.text == "🤖 Use Telegram")
@@ -557,6 +594,10 @@ async def use_telegram(message: Message):
         get_text(uid, "menu"),
         reply_markup=user_menu(uid)
     )
+
+# =====================================================
+# CHOICE MENU - "🌐 Open Web"
+# =====================================================
 
 @router.message(F.text == "🌐 Open Web")
 async def open_web(message: Message):
@@ -568,6 +609,10 @@ async def open_web(message: Message):
         "🌐 Click to open web interface:",
         reply_markup=kb
     )
+
+# =====================================================
+# CHOICE MENU - "ℹ️ About"
+# =====================================================
 
 @router.message(F.text == "ℹ️ About")
 async def about(message: Message):
@@ -728,7 +773,6 @@ async def process_ticket_number(message: Message, state: FSMContext):
 async def choose_block(message: Message, state: FSMContext):
     uid = message.from_user.id
     
-    # Create 50-ticket blocks (1-50, 51-100, ... up to 20000)
     kb_rows = []
     row = []
     for i in range(1, 20001, 50):
@@ -780,7 +824,6 @@ async def process_block(message: Message, state: FSMContext):
         await message.answer("❌ No tickets available in this block.", reply_markup=kb)
         return
     
-    # Show available tickets in this block (max 50 per page)
     kb_rows = []
     row = []
     for ticket_id, ticket_num in tickets[:50]:
@@ -885,7 +928,7 @@ async def process_payment(message: Message, state: FSMContext):
             pass
 
 # =====================================================
-# APPROVE/REJECT
+# APPROVE/REJECT PAYMENT
 # =====================================================
 
 @router.callback_query(F.data.startswith("approve_"))
@@ -1058,32 +1101,9 @@ async def support_cmd(message: Message):
         reply_markup=kb
     )
 
-@router.message(F.text.in_(["🌍 Language", "🌍 ቋንቋ"]))
-async def lang_cmd(message: Message):
-    uid = message.from_user.id
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🇬🇧 English", callback_data="lang_en")],
-        [InlineKeyboardButton(text="🇪🇹 አማርኛ", callback_data="lang_am")],
-    ])
-    await message.answer(get_text(uid, "choose_lang"), reply_markup=kb)
-
-@router.callback_query(F.data.startswith("lang_"))
-async def change_lang(callback: CallbackQuery):
-    uid = callback.from_user.id
-    lang = callback.data.split("_")[1]
-    LangCache.set(uid, lang)
-    
-    await DatabaseHelper.execute(
-        "UPDATE users SET language = $1 WHERE telegram_id = $2",
-        lang, uid
-    )
-    
-    await callback.message.delete()
-    await callback.message.answer(
-        get_text(uid, "lang_changed"),
-        reply_markup=user_menu(uid)
-    )
-    await callback.answer()
+# =====================================================
+# LANGUAGE TOGGLE - Handled earlier in the file
+# =====================================================
 
 # =====================================================
 # ADMIN COMMANDS
@@ -1654,7 +1674,6 @@ async def main():
     await init_db_postgres()
     await set_commands()
     
-    # Clear webhook and drop pending updates to avoid conflict
     try:
         await bot.delete_webhook(drop_pending_updates=True)
         logger.info("✅ Webhook cleared")
@@ -1667,7 +1686,6 @@ async def main():
     logger.info("🚀 Bot started with PostgreSQL!")
     logger.info(f"👤 Admins: {ADMIN_IDS}")
     logger.info(f"🌐 WebApp: {WEBAPP_URL}")
-    logger.info(f"📊 Database: Connected to PostgreSQL")
     
     await dp.start_polling(
         bot,
