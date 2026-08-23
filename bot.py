@@ -1,9 +1,9 @@
 # =====================================================
 # BOT.PY - SIKET EKUB LOTTERY BOT
-# Registration FIRST (once) → Choice Menu → Bot/Web
-# Language toggle does NOT trigger registration
-# 50-ticket blocks for better viewing
-# PostgreSQL for persistent data
+# Complete Production Bot with PostgreSQL
+# Registration FIRST (ONCE) → Choice Menu → Bot/Web
+# All menus under input (ReplyKeyboardMarkup)
+# English & Amharic fully working
 # =====================================================
 
 import sys
@@ -243,7 +243,7 @@ class LangCache:
             cls._cache[user_id] = lang
 
 # =====================================================
-# LANGUAGE TEXTS
+# LANGUAGE TEXTS - CORRECT MAPPING
 # =====================================================
 TEXTS = {
     "en": {
@@ -301,6 +301,7 @@ TEXTS = {
         "admin_panel": "🛠️ Admin Panel",
         "back_user": "🔙 Back to User",
         "no_users": "📭 No users found.",
+        "web_loaded": "🌐 Web Interface Loaded!\n👤 User: {user}\n📱 Phone: {phone}\n💰 Balance: {balance} ETB",
     },
     "am": {
         "welcome": "🎰 እንኳን ወደ ሲኬት ዕቁብ በደህና መጡ!\n💰 ዋጋ: 3,000 ብር",
@@ -308,7 +309,7 @@ TEXTS = {
         "buy": "🎯 ቲኬት ግዛ",
         "tickets": "🎫 ቲኬቶቼ",
         "prizes": "🏆 ሽልማቶች",
-        "balance": "💰 ቀሪ",
+        "balance": "💰 ቀሪ ሂሳብ",
         "support": "💬 ድጋፍ",
         "lang": "🌍 ቋንቋ",
         "reg_phone": "📱 ስልክ አጋሩ",
@@ -345,8 +346,8 @@ TEXTS = {
         "support_info": "💬 ድጋፍ: {channel}",
         "your_tickets": "🎫 ቲኬቶችዎ:\n",
         "choose_interface": "🎰 እንዴት መጫወት ይፈልጋሉ?",
-        "use_telegram": "🤖 በቴሌግራም",
-        "open_web": "🌐 በድር",
+        "use_telegram": "🤖 በቴሌግራም ይጠቀሙ",
+        "open_web": "🌐 የድር በይነገጽ",
         "about": "ℹ️ መረጃ",
         "sold": "ተሽጧል",
         "select_block": "📦 ብሎክ ምረጥ (50 ቲኬቶች):",
@@ -355,8 +356,9 @@ TEXTS = {
         "ticket_not_found": "❌ ቲኬት አልተገኘም።",
         "ticket_taken": "❌ ቲኬቱ ተወስዷል።",
         "admin_panel": "🛠️ የአስተዳዳሪ ፓነል",
-        "back_user": "🔙 ወደ ተጠቃሚ",
+        "back_user": "🔙 ወደ ተጠቃሚ ምናሌ",
         "no_users": "📭 ምንም ተጠቃሚ የለም።",
+        "web_loaded": "🌐 የድር በይነገጽ ተጭኗል!\n👤 ተጠቃሚ: {user}\n📱 ስልክ: {phone}\n💰 ቀሪ: {balance} ብር",
     }
 }
 
@@ -366,7 +368,7 @@ def get_text(user_id: int, key: str, **kwargs) -> str:
     return text.format(**kwargs) if kwargs else text
 
 # =====================================================
-# KEYBOARDS
+# KEYBOARDS - ALL UNDER INPUT (ReplyKeyboardMarkup)
 # =====================================================
 
 def choice_menu() -> ReplyKeyboardMarkup:
@@ -442,11 +444,9 @@ async def start_cmd(message: Message, state: FSMContext):
     uid = message.from_user.id
     await state.clear()
     
-    # CHECK IF USER EXISTS FIRST
     user = await DatabaseHelper.fetch_one("SELECT * FROM users WHERE telegram_id = $1", uid)
     
     if user:
-        # USER EXISTS - Show CHOICE MENU directly
         lang = user[8] if len(user) > 8 else "en"
         LangCache.set(uid, lang)
         await message.answer(
@@ -458,7 +458,6 @@ async def start_cmd(message: Message, state: FSMContext):
         )
         return
     
-    # NEW USER - Show language selection for registration
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🇬🇧 English", callback_data="reg_lang_en")],
         [InlineKeyboardButton(text="🇪🇹 አማርኛ", callback_data="reg_lang_am")],
@@ -516,7 +515,6 @@ async def reg_address(message: Message, state: FSMContext):
     address = message.text
     lang = LangCache.get(uid)
     
-    # INSERT USER - This is the ONLY place user is created (REGISTRATION ONCE)
     await DatabaseHelper.execute(
         "INSERT INTO users (telegram_id, phone_number, address, language) VALUES ($1, $2, $3, $4)",
         uid, phone, address, lang
@@ -536,13 +534,11 @@ async def reg_address(message: Message, state: FSMContext):
 async def lang_toggle(message: Message):
     uid = message.from_user.id
     
-    # Check if user exists
     user = await DatabaseHelper.fetch_one("SELECT * FROM users WHERE telegram_id = $1", uid)
     if not user:
         await message.answer("❌ Please /start first to register.")
         return
     
-    # Show language selection (just toggles language, NO registration)
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🇬🇧 English", callback_data="toggle_lang_en")],
         [InlineKeyboardButton(text="🇪🇹 አማርኛ", callback_data="toggle_lang_am")],
@@ -554,7 +550,6 @@ async def toggle_lang(callback: CallbackQuery):
     uid = callback.from_user.id
     lang = callback.data.split("_")[2]
     
-    # Update language in database ONLY (NO REGISTRATION)
     await DatabaseHelper.execute(
         "UPDATE users SET language = $1 WHERE telegram_id = $2",
         lang, uid
@@ -587,7 +582,7 @@ async def use_telegram(message: Message):
     )
 
 # =====================================================
-# CHOICE MENU - "🌐 Open Web"
+# CHOICE MENU - "🌐 Open Web" (LOADS FROM DATABASE)
 # =====================================================
 
 @router.message(F.text == "🌐 Open Web")
@@ -599,14 +594,23 @@ async def open_web(message: Message):
         await message.answer("❌ Please /start first to register.")
         return
     
+    # Get user data
+    telegram_id = user[1]
+    phone = user[3] if user[3] else "N/A"
+    balance = user[5] if user[5] is not None else 0
+    
+    # Pass Telegram ID to web interface via URL
+    webapp_url_with_user = f"{WEBAPP_URL}?telegram_id={uid}"
+    
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🌐 Open Web", web_app=WebAppInfo(url=WEBAPP_URL))]
+        [InlineKeyboardButton(
+            text="🌐 Open Web Interface", 
+            web_app=WebAppInfo(url=webapp_url_with_user)
+        )]
     ])
     
     await message.answer(
-        "🌐 **Open Web Interface**\n\n"
-        "Click the button below to open the web version.\n"
-        "Your account is already registered and ready!",
+        get_text(uid, "web_loaded", user=uid, phone=phone, balance=balance),
         reply_markup=kb,
         parse_mode="Markdown"
     )
@@ -636,12 +640,17 @@ async def about(message: Message):
     )
 
 # =====================================================
-# BUY TICKET
+# BUY TICKET - WORKS WITH BOTH ENGLISH AND AMHARIC
 # =====================================================
 
 @router.message(F.text.in_(["🎯 Buy Ticket", "🎯 ቲኬት ግዛ"]))
 async def buy_ticket(message: Message, state: FSMContext):
     uid = message.from_user.id
+    
+    user = await DatabaseHelper.fetch_one("SELECT * FROM users WHERE telegram_id = $1", uid)
+    if not user:
+        await message.answer("❌ Please /start first to register.")
+        return
     
     game = await DatabaseHelper.fetch_one(
         "SELECT type_id FROM ticket_types WHERE is_active = true LIMIT 1"
@@ -658,6 +667,41 @@ async def buy_ticket(message: Message, state: FSMContext):
         get_text(uid, "pick_ticket"),
         reply_markup=buy_menu(uid)
     )
+
+# FALLBACK: Catch any message containing ticket-related text
+@router.message(F.text.contains("ቲኬት") | F.text.contains("Buy") | F.text.contains("ticket"))
+async def buy_ticket_fallback(message: Message, state: FSMContext):
+    uid = message.from_user.id
+    
+    # Check if this is a ticket number input (digits only)
+    if message.text.strip().isdigit():
+        # This is likely a ticket number, let process_ticket_number handle it
+        return
+    
+    user = await DatabaseHelper.fetch_one("SELECT * FROM users WHERE telegram_id = $1", uid)
+    if not user:
+        await message.answer("❌ Please /start first to register.")
+        return
+    
+    game = await DatabaseHelper.fetch_one(
+        "SELECT type_id FROM ticket_types WHERE is_active = true LIMIT 1"
+    )
+    if not game:
+        await message.answer(
+            "❌ No active game. Contact admin.",
+            reply_markup=user_menu(uid)
+        )
+        return
+    
+    await state.update_data(game_id=game[0])
+    await message.answer(
+        get_text(uid, "pick_ticket"),
+        reply_markup=buy_menu(uid)
+    )
+
+# =====================================================
+# BUY METHOD 1: RANDOM
+# =====================================================
 
 @router.message(F.text.in_(["🎲 Random", "🎲 በዘፈቀደ"]))
 async def random_ticket(message: Message, state: FSMContext):
@@ -700,6 +744,10 @@ async def random_ticket(message: Message, state: FSMContext):
         reply_markup=kb
     )
     await state.set_state(BuyState.payment)
+
+# =====================================================
+# BUY METHOD 2: TYPE NUMBER
+# =====================================================
 
 @router.message(F.text.in_(["✏️ Type Number", "✏️ ቁጥር ጻፍ"]))
 async def type_number(message: Message, state: FSMContext):
@@ -768,14 +816,13 @@ async def process_ticket_number(message: Message, state: FSMContext):
     await state.set_state(BuyState.payment)
 
 # =====================================================
-# CHOOSE BLOCK - 50 TICKETS PER BLOCK
+# BUY METHOD 3: CHOOSE BLOCK - 50 TICKETS PER BLOCK
 # =====================================================
 
 @router.message(F.text.in_(["📦 Choose Block", "📦 ብሎክ ምረጥ"]))
 async def choose_block(message: Message, state: FSMContext):
     uid = message.from_user.id
     
-    # Create 50-ticket blocks (1-50, 51-100, ... up to 20000)
     kb_rows = []
     row = []
     for i in range(1, 20001, 50):
@@ -827,7 +874,6 @@ async def process_block(message: Message, state: FSMContext):
         await message.answer("❌ No tickets available in this block.", reply_markup=kb)
         return
     
-    # Show available tickets (max 50 per page)
     kb_rows = []
     row = []
     for ticket_id, ticket_num in tickets[:50]:
@@ -1054,7 +1100,7 @@ async def my_tickets(message: Message):
     
     await message.answer("\n".join(lines), reply_markup=user_menu(uid))
 
-@router.message(F.text.in_(["💰 Balance", "💰 ቀሪ"]))
+@router.message(F.text.in_(["💰 Balance", "💰 ቀሪ ሂሳብ"]))
 async def balance_cmd(message: Message):
     uid = message.from_user.id
     user = await DatabaseHelper.fetch_one(
@@ -1172,9 +1218,7 @@ async def create_game_slots(message: Message, state: FSMContext):
     )
     type_id = result[0] if result else None
     
-    # =====================================================
     # TICKET GENERATION - 20000 TICKETS IN BATCHES OF 1000
-    # =====================================================
     logger.info(f"🎫 Generating {slots} tickets for game '{name}'...")
     batch_size = 1000
     for start in range(1, slots + 1, batch_size):
