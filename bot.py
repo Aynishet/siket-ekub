@@ -831,30 +831,42 @@ async def cmd_start(message: Message, state: FSMContext):
     webapp_url = os.getenv("WEBAPP_URL", "https://siket-ekub-webapp.onrender.com")
     
     # Create choice menu as ReplyKeyboardMarkup (appears under input text)
+@router.message(Command("start"))
+async def cmd_start(message: Message, state: FSMContext):
+    """Start command - show choice menu in Amharic"""
+    await state.clear()
+    uid = message.from_user.id
+    webapp_url = os.getenv("WEBAPP_URL", "https://siket-ekub-webapp.onrender.com")
+    
+    # Choice menu in Amharic ONLY
     kb = ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text=Localization.get_text(uid, "choice_telegram"))],
-            [KeyboardButton(text=Localization.get_text(uid, "choice_web"))],
-            [KeyboardButton(text=Localization.get_text(uid, "choice_about"))]
+            [KeyboardButton(text="🤖 የቴሌግራም አማራጭ/Telegram")],
+            [KeyboardButton(text="🌐 የድረገጽ ክፈት/Website")],
+            [KeyboardButton(text="ℹ️ ስለ ሲኬት ዕቁብ")]
         ],
         resize_keyboard=True
     )
     
-    # Welcome message with choice - shows prize list
-    welcome_msg = (
-        f"🎰 **Siket Ekub Lottery**\n\n"
-        f"Ticket Price: 3,000 ETB\n\n"
-        f"🏆 **10 Grand Prizes:**\n"
-        f"1st: BWD Leopard 3 (8,000,000 ETB)\n"
-        f"2nd: Hyundai Bayon (5,000,000 ETB)\n"
-        f"3rd: Shop Space (4,000,000 ETB)\n"
-        f"4th-7th: 1,000,000 ETB Cash each\n"
-        f"8th: 500,000 ETB Cash\n"
-        f"9th: 300,000 ETB Cash\n"
-        f"10th: 200,000 ETB Cash\n\n"
-        f"📌 Register > Pick Ticket > Pay 3,000 ETB > Win!\n\n"
-        f"🚀 GOOD LUCK!\n\n"
-        f"{Localization.get_text(uid, 'choose_interface')}"
+    await message.answer(
+        f"🎰 **ሲኬት ዕቁብ ሎተሪ**\n\n"
+        f"የቲኬት ዋጋ: 3,000 ብር\n\n"
+        f"🏆 **10 ዋና ሽልማቶች:**\n"
+        f"1ኛ: BWD Leopard 3 (8,000,000 ብር)\n"
+        f"2ኛ: Hyundai Bayon (5,000,000 ብር)\n"
+        f"3ኛ: የሱቅ ቦታ (4,000,000 ብር)\n"
+        f"4ኛ: 1,000,000 ብር ጥሬ ገንዘብ\n"
+        f"5ኛ: 1,000,000 ብር ጥሬ ገንዘብ\n"
+        f"6ኛ: 1,000,000 ብር ጥሬ ገንዘብ\n"
+        f"7ኛ: 1,000,000 ብር ጥሬ ገንዘብ\n"
+        f"8ኛ: 500,000 ብር ጥሬ ገንዘብ\n"
+        f"9ኛ: 300,000 ብር ጥሬ ገንዘብ\n"
+        f"10ኛ: 200,000 ብር ጥሬ ገንዘብ\n\n"
+        f"📌 ይመዝገቡ > ቲኬት ይምረጡ > 3,000 ብር ይክፈሉ > ያሸንፉ!\n\n"
+        f"🚀 መልካም እድል!\n\n"
+        f"እንዴት መጫወት እንደሚፈልጉ ይምረጡ:",
+        reply_markup=kb,
+        parse_mode="Markdown"
     )
     
     await message.answer(welcome_msg, reply_markup=kb, parse_mode="Markdown")
@@ -894,9 +906,9 @@ async def choice_telegram(message: Message, state: FSMContext):
         parse_mode="Markdown"
     )
 
-@router.message(F.text.in_(["🌐 Open Web Interface", "🌐 የድር በይነገጽ ክፈት"]))
+@router.message(F.text == "🌐 የድር በይነገጽ ክፈት")
 async def choice_web(message: Message):
-    """User chose Web Interface - send webapp link"""
+    """Open WebApp directly - no extra questions"""
     uid = message.from_user.id
     webapp_url = os.getenv("WEBAPP_URL", "https://siket-ekub-webapp.onrender.com")
     
@@ -907,18 +919,14 @@ async def choice_web(message: Message):
         lang = user[8] if len(user) > 8 else "en"
         shared_state.set_language(uid, lang)
     
+    # Direct WebApp button - no extra text asking questions
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🌐 Open Web Interface", web_app=WebAppInfo(url=webapp_url))],
-        [InlineKeyboardButton(text="🔙 Back to Menu", callback_data="choice_back")]
+        [InlineKeyboardButton(text="🌐 የድር በይነገጽ ክፈት", web_app=WebAppInfo(url=webapp_url))]
     ])
     
     await message.answer(
-        "🌐 **Siket Ekub Web Interface**\n\n"
-        "Click the button below to open the web interface in your browser.\n\n"
-        "You can also access it directly at:\n"
-        f"`{webapp_url}`",
-        reply_markup=kb,
-        parse_mode="Markdown"
+        f"🌐 የድር በይነገጽ ለመክፈት ይጫኑ:",
+        reply_markup=kb
     )
 
 @router.message(F.text.in_(["ℹ️ About Siket Ekub", "ℹ️ ስለ ሲኬት ዕቁብ"]))
