@@ -1,7 +1,8 @@
 # =====================================================
-# BOT.PY - SIKET EKUB LOTTERY BOT (FIXED)
-# ONLY FIXED: Ticket blocks 100 instead of 1000, Admin menu responsive
-# Everything else UNCHANGED
+# BOT.PY - SIKET EKUB LOTTERY BOT
+# Complete working version with PostgreSQL
+# Ticket blocks: 50 tickets per block
+# All menus responsive (English + Amharic)
 # =====================================================
 
 import sys
@@ -31,11 +32,10 @@ from aiogram.types import (
     BufferedInputFile, BotCommand, WebAppInfo
 )
 
-# import aiosqlite
 from dotenv import load_dotenv
-# from database import init_db, DB_NAME
 import asyncpg
 from asyncpg import Pool
+
 # =====================================================
 # ENV
 # =====================================================
@@ -49,6 +49,7 @@ ADMIN_IDS = [int(x.strip()) for x in admin_ids_raw.split(",") if x.strip()]
 
 if not TOKEN or not ADMIN_IDS:
     raise ValueError("BOT_TOKEN and ADMIN_IDS required!")
+
 # =====================================================
 # POSTGRESQL DATABASE URL
 # =====================================================
@@ -75,7 +76,6 @@ storage = MemoryStorage()
 bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=storage)
 router = Router()  # <-- CRITICAL: router must be defined here
-
 
 # =====================================================
 # POSTGRESQL CONNECTION AND INITIALIZATION
@@ -470,7 +470,7 @@ async def start_cmd(message: Message, state: FSMContext):
     uid = message.from_user.id
     await state.clear()
     
-    user = await DatabaseHelper.fetch_one("SELECT * FROM users WHERE telegram_id = ?", (uid,))
+    user = await DatabaseHelper.fetch_one("SELECT * FROM users WHERE telegram_id = $1", (uid,))
     
     if user:
         lang = user[8] if len(user) > 8 else "en"
@@ -536,8 +536,8 @@ async def reg_address(message: Message, state: FSMContext):
     lang = LangCache.get(uid)
     
     await DatabaseHelper.execute(
-        "INSERT INTO users (telegram_id, phone_number, address, language) VALUES (?, ?, ?, ?)",
-        (uid, phone, address, lang)
+        "INSERT INTO users (telegram_id, phone_number, address, language) VALUES ($1, $2, $3, $4)",
+        uid, phone, address, lang
     )
     await state.clear()
     
@@ -597,7 +597,7 @@ async def buy_ticket(message: Message, state: FSMContext):
     uid = message.from_user.id
     
     game = await DatabaseHelper.fetch_one(
-        "SELECT type_id FROM ticket_types WHERE is_active = 1 LIMIT 1"
+        "SELECT type_id FROM ticket_types WHERE is_active = true LIMIT 1"
     )
     if not game:
         await message.answer(
@@ -620,7 +620,7 @@ async def random_ticket(message: Message, state: FSMContext):
     
     if not type_id:
         game = await DatabaseHelper.fetch_one(
-            "SELECT type_id FROM ticket_types WHERE is_active = 1 LIMIT 1"
+            "SELECT type_id FROM ticket_types WHERE is_active = true LIMIT 1"
         )
         if not game:
             await message.answer("❌ No active game.", reply_markup=user_menu(uid))
@@ -629,8 +629,8 @@ async def random_ticket(message: Message, state: FSMContext):
         await state.update_data(game_id=type_id)
     
     ticket = await DatabaseHelper.fetch_one(
-        "SELECT ticket_id, ticket_number FROM tickets WHERE type_id = ? AND status = 'available' LIMIT 1",
-        (type_id,)
+        "SELECT ticket_id, ticket_number FROM tickets WHERE type_id = $1 AND status = 'available' LIMIT 1",
+        type_id
     )
     
     if not ticket:
@@ -690,7 +690,7 @@ async def process_ticket_number(message: Message, state: FSMContext):
     
     if not type_id:
         game = await DatabaseHelper.fetch_one(
-            "SELECT type_id FROM ticket_types WHERE is_active = 1 LIMIT 1"
+            "SELECT type_id FROM ticket_types WHERE is_active = true LIMIT 1"
         )
         if not game:
             await message.answer("❌ No active game.", reply_markup=user_menu(uid))
@@ -699,8 +699,8 @@ async def process_ticket_number(message: Message, state: FSMContext):
         await state.update_data(game_id=type_id)
     
     ticket = await DatabaseHelper.fetch_one(
-        "SELECT ticket_id FROM tickets WHERE type_id = ? AND ticket_number = ? AND status = 'available'",
-        (type_id, ticket_num)
+        "SELECT ticket_id FROM tickets WHERE type_id = $1 AND ticket_number = $2 AND status = 'available'",
+        type_id, ticket_num
     )
     
     if not ticket:
@@ -721,10 +721,8 @@ async def process_ticket_number(message: Message, state: FSMContext):
     await state.set_state(BuyState.payment)
 
 # =====================================================
-# CHOOSE BLOCK - FIXED: 100 ticket blocks instead of 1000
+# CHOOSE BLOCK - 50 tickets per block
 # =====================================================
-
-
 
 @router.message(F.text.in_(["📦 Choose Block", "📦 ብሎክ ምረጥ"]))
 async def choose_block(message: Message, state: FSMContext):
@@ -733,9 +731,9 @@ async def choose_block(message: Message, state: FSMContext):
     # Create 50-ticket blocks (1-50, 51-100, ... up to 20000)
     kb_rows = []
     row = []
-    for i in range(1, 20001, 50):  # ← Changed from 100 to 50
+    for i in range(1, 20001, 50):
         start = i
-        end = min(i + 49, 20000)   # ← Changed from 99 to 49
+        end = min(i + 49, 20000)
         row.append(KeyboardButton(text=f"{start}-{end}"))
         if len(row) == 5:
             kb_rows.append(row)
@@ -752,10 +750,6 @@ async def choose_block(message: Message, state: FSMContext):
         reply_markup=kb
     )
 
-# =====================================================
-# PROCESS BLOCK - FIXED: Shows available tickets in the block
-# =====================================================
-
 @router.message(F.text.regexp(r'^\d+-\d+$'))
 async def process_block(message: Message, state: FSMContext):
     uid = message.from_user.id
@@ -765,7 +759,7 @@ async def process_block(message: Message, state: FSMContext):
     
     if not type_id:
         game = await DatabaseHelper.fetch_one(
-            "SELECT type_id FROM ticket_types WHERE is_active = 1 LIMIT 1"
+            "SELECT type_id FROM ticket_types WHERE is_active = true LIMIT 1"
         )
         if not game:
             await message.answer("❌ No active game.", reply_markup=user_menu(uid))
@@ -774,8 +768,8 @@ async def process_block(message: Message, state: FSMContext):
         await state.update_data(game_id=type_id)
     
     tickets = await DatabaseHelper.fetch(
-        "SELECT ticket_id, ticket_number FROM tickets WHERE type_id = ? AND ticket_number BETWEEN ? AND ? AND status = 'available'",
-        (type_id, start, end)
+        "SELECT ticket_id, ticket_number FROM tickets WHERE type_id = $1 AND ticket_number BETWEEN $2 AND $3 AND status = 'available'",
+        type_id, start, end
     )
     
     if not tickets:
@@ -833,7 +827,7 @@ async def process_payment(message: Message, state: FSMContext):
         await state.clear()
         return
     
-    user = await DatabaseHelper.fetch_one("SELECT user_id, phone_number, full_name FROM users WHERE telegram_id = ?", (uid,))
+    user = await DatabaseHelper.fetch_one("SELECT user_id, phone_number, full_name FROM users WHERE telegram_id = $1", (uid,))
     if not user:
         await message.answer("❌ Please /start first.")
         return
@@ -848,10 +842,10 @@ async def process_payment(message: Message, state: FSMContext):
         screenshot = base64.b64encode(downloaded.read()).decode('utf-8')
     
     cursor = await DatabaseHelper.execute(
-        "INSERT INTO payments (user_id, telegram_id, ticket_id, ticket_number, status, screenshot_data) VALUES (?, ?, ?, ?, 'pending', ?)",
-        (user_id, uid, ticket_id, ticket_num, screenshot)
+        "INSERT INTO payments (user_id, telegram_id, ticket_id, ticket_number, status, screenshot_data) VALUES ($1, $2, $3, $4, 'pending', $5) RETURNING payment_id",
+        user_id, uid, ticket_id, ticket_num, screenshot
     )
-    payment_id = cursor.lastrowid
+    payment_id = cursor[0] if isinstance(cursor, tuple) else cursor
     
     await state.clear()
     await message.answer(
@@ -903,8 +897,8 @@ async def approve_pay(callback: CallbackQuery):
     
     payment_id = int(callback.data.split("_")[1])
     payment = await DatabaseHelper.fetch_one(
-        "SELECT telegram_id, ticket_id, ticket_number FROM payments WHERE payment_id = ? AND status = 'pending'",
-        (payment_id,)
+        "SELECT telegram_id, ticket_id, ticket_number FROM payments WHERE payment_id = $1 AND status = 'pending'",
+        payment_id
     )
     if not payment:
         await callback.answer("❌ Not found!", show_alert=True)
@@ -913,29 +907,29 @@ async def approve_pay(callback: CallbackQuery):
     tg_id, ticket_id, ticket_num = payment
     
     cursor = await DatabaseHelper.execute(
-        "UPDATE tickets SET status = 'sold', telegram_id = ?, assigned_at = CURRENT_TIMESTAMP WHERE ticket_id = ? AND status = 'available'",
-        (tg_id, ticket_id)
+        "UPDATE tickets SET status = 'sold', telegram_id = $1, assigned_at = CURRENT_TIMESTAMP WHERE ticket_id = $2 AND status = 'available'",
+        tg_id, ticket_id
     )
     
-    if cursor.rowcount == 0:
+    if cursor == "UPDATE 0" or (hasattr(cursor, 'rowcount') and cursor.rowcount == 0):
         await DatabaseHelper.execute(
-            "UPDATE payments SET status = 'rejected', admin_notes = 'Ticket already sold' WHERE payment_id = ?",
-            (payment_id,)
+            "UPDATE payments SET status = 'rejected', admin_notes = 'Ticket already sold' WHERE payment_id = $1",
+            payment_id
         )
         await callback.message.edit_text(f"❌ Ticket #{ticket_num} already sold!")
         await callback.answer()
         return
     
     user_info = await DatabaseHelper.fetch_one(
-        "SELECT full_name, phone_number FROM users WHERE telegram_id = ?",
-        (tg_id,)
+        "SELECT full_name, phone_number FROM users WHERE telegram_id = $1",
+        tg_id
     )
     name = user_info[0] if user_info else "User"
     phone = user_info[1] if user_info else "N/A"
     
     await DatabaseHelper.execute_transaction([
-        ("UPDATE payments SET status = 'approved', verified_by = ?, verified_at = CURRENT_TIMESTAMP WHERE payment_id = ?", (uid, payment_id)),
-        ("UPDATE users SET balance = COALESCE(balance, 0) + 3000, total_spent = COALESCE(total_spent, 0) + 3000 WHERE telegram_id = ?", (tg_id,))
+        ("UPDATE payments SET status = 'approved', verified_by = $1, verified_at = CURRENT_TIMESTAMP WHERE payment_id = $2", uid, payment_id),
+        ("UPDATE users SET balance = COALESCE(balance, 0) + 3000, total_spent = COALESCE(total_spent, 0) + 3000 WHERE telegram_id = $1", tg_id)
     ])
     
     try:
@@ -967,13 +961,13 @@ async def reject_pay(callback: CallbackQuery):
     
     payment_id = int(callback.data.split("_")[1])
     payment = await DatabaseHelper.fetch_one(
-        "SELECT telegram_id, ticket_number FROM payments WHERE payment_id = ? AND status = 'pending'",
-        (payment_id,)
+        "SELECT telegram_id, ticket_number FROM payments WHERE payment_id = $1 AND status = 'pending'",
+        payment_id
     )
     if payment:
         await DatabaseHelper.execute(
-            "UPDATE payments SET status = 'rejected', verified_by = ? WHERE payment_id = ?",
-            (uid, payment_id)
+            "UPDATE payments SET status = 'rejected', verified_by = $1 WHERE payment_id = $2",
+            uid, payment_id
         )
         try:
             await bot.send_message(payment[0], get_text(payment[0], "pay_rejected"))
@@ -1012,8 +1006,8 @@ async def back_to_user(message: Message):
 async def my_tickets(message: Message):
     uid = message.from_user.id
     tickets = await DatabaseHelper.fetch(
-        "SELECT ticket_number, assigned_at FROM tickets WHERE telegram_id = ? AND status = 'sold'",
-        (uid,)
+        "SELECT ticket_number, assigned_at FROM tickets WHERE telegram_id = $1 AND status = 'sold'",
+        uid
     )
     if not tickets:
         await message.answer(get_text(uid, "no_tickets"), reply_markup=user_menu(uid))
@@ -1031,16 +1025,16 @@ async def my_tickets(message: Message):
 async def balance_cmd(message: Message):
     uid = message.from_user.id
     user = await DatabaseHelper.fetch_one(
-        "SELECT balance, total_spent FROM users WHERE telegram_id = ?",
-        (uid,)
+        "SELECT balance, total_spent FROM users WHERE telegram_id = $1",
+        uid
     )
     if not user:
         await message.answer("❌ Please /start first.")
         return
     
     tickets = await DatabaseHelper.fetch_one(
-        "SELECT COUNT(*) FROM tickets WHERE telegram_id = ? AND status = 'sold'",
-        (uid,)
+        "SELECT COUNT(*) FROM tickets WHERE telegram_id = $1 AND status = 'sold'",
+        uid
     )
     await message.answer(
         get_text(uid, "balance_info", balance=user[0] or 0, tickets=tickets[0] or 0, spent=user[1] or 0),
@@ -1080,8 +1074,8 @@ async def change_lang(callback: CallbackQuery):
     LangCache.set(uid, lang)
     
     await DatabaseHelper.execute(
-        "UPDATE users SET language = ? WHERE telegram_id = ?",
-        (lang, uid)
+        "UPDATE users SET language = $1 WHERE telegram_id = $2",
+        lang, uid
     )
     
     await callback.message.delete()
@@ -1167,19 +1161,20 @@ async def create_game_slots(message: Message, state: FSMContext):
     prizes = data.get("prizes")
     
     cursor = await DatabaseHelper.execute(
-        "INSERT INTO ticket_types (name, price, total_slots, is_active, prizes) VALUES (?, 3000, ?, 1, ?)",
-        (name, slots, prizes)
+        "INSERT INTO ticket_types (name, price, total_slots, is_active, prizes) VALUES ($1, 3000, $2, true, $3) RETURNING type_id",
+        name, slots, prizes
     )
-    type_id = cursor.lastrowid
+    type_id = cursor[0] if isinstance(cursor, tuple) else cursor
     
     batch_size = 1000
     for start in range(1, slots + 1, batch_size):
         end = min(start + batch_size - 1, slots)
         values = [(type_id, i, 'available') for i in range(start, end + 1)]
-        await DatabaseHelper.executemany(
-            "INSERT INTO tickets (type_id, ticket_number, status) VALUES (?, ?, ?)",
-            values
-        )
+        for val in values:
+            await DatabaseHelper.execute(
+                "INSERT INTO tickets (type_id, ticket_number, status) VALUES ($1, $2, $3)",
+                val[0], val[1], val[2]
+            )
         logger.info(f"Created tickets {start}-{end}")
     
     await state.clear()
@@ -1223,8 +1218,8 @@ async def view_payment(callback: CallbackQuery):
     
     payment_id = int(callback.data.split("_")[2])
     payment = await DatabaseHelper.fetch_one(
-        "SELECT payment_id, telegram_id, ticket_number, screenshot_data FROM payments WHERE payment_id = ?",
-        (payment_id,)
+        "SELECT payment_id, telegram_id, ticket_number, screenshot_data FROM payments WHERE payment_id = $1",
+        payment_id
     )
     if not payment:
         await callback.answer("❌ Not found!", show_alert=True)
@@ -1328,8 +1323,8 @@ async def refund_user(callback: CallbackQuery):
     
     user_id = int(callback.data.split("_")[2])
     user = await DatabaseHelper.fetch_one(
-        "SELECT telegram_id, balance FROM users WHERE user_id = ?",
-        (user_id,)
+        "SELECT telegram_id, balance FROM users WHERE user_id = $1",
+        user_id
     )
     if not user or user[1] <= 0:
         await callback.answer("❌ No balance!", show_alert=True)
@@ -1338,8 +1333,8 @@ async def refund_user(callback: CallbackQuery):
     tg_id, balance = user
     
     await DatabaseHelper.execute_transaction([
-        ("INSERT INTO refunds (user_id, amount, reason, status, processed_by, processed_at) VALUES (?, ?, 'Admin refund', 'completed', ?, CURRENT_TIMESTAMP)", (user_id, balance, uid)),
-        ("UPDATE users SET balance = 0 WHERE user_id = ?", (user_id,))
+        ("INSERT INTO refunds (user_id, amount, reason, status, processed_by, processed_at) VALUES ($1, $2, 'Admin refund', 'completed', $3, CURRENT_TIMESTAMP)", user_id, balance, uid),
+        ("UPDATE users SET balance = 0 WHERE user_id = $1", user_id)
     ])
     
     try:
@@ -1370,8 +1365,8 @@ async def refund_all(callback: CallbackQuery):
     total = 0
     for user_id, tg_id, balance in users:
         await DatabaseHelper.execute_transaction([
-            ("INSERT INTO refunds (user_id, amount, reason, status, processed_by, processed_at) VALUES (?, ?, 'Bulk refund', 'completed', ?, CURRENT_TIMESTAMP)", (user_id, balance, uid)),
-            ("UPDATE users SET balance = 0 WHERE user_id = ?", (user_id,))
+            ("INSERT INTO refunds (user_id, amount, reason, status, processed_by, processed_at) VALUES ($1, $2, 'Bulk refund', 'completed', $3, CURRENT_TIMESTAMP)", user_id, balance, uid),
+            ("UPDATE users SET balance = 0 WHERE user_id = $1", user_id)
         ])
         total += balance
         try:
@@ -1529,7 +1524,7 @@ async def admin_buy_user_id(message: Message, state: FSMContext):
         await message.answer("❌ Invalid ID. Enter number:")
         return
     
-    user = await DatabaseHelper.fetch_one("SELECT user_id FROM users WHERE telegram_id = ?", (target_id,))
+    user = await DatabaseHelper.fetch_one("SELECT user_id FROM users WHERE telegram_id = $1", target_id)
     if not user:
         await message.answer("❌ User not found!")
         return
@@ -1557,8 +1552,8 @@ async def admin_buy_ticket(message: Message, state: FSMContext):
         try:
             num = int(ticket_input)
             ticket = await DatabaseHelper.fetch_one(
-                "SELECT ticket_id, ticket_number FROM tickets WHERE ticket_number = ? AND status = 'available'",
-                (num,)
+                "SELECT ticket_id, ticket_number FROM tickets WHERE ticket_number = $1 AND status = 'available'",
+                num
             )
         except:
             await message.answer("❌ Invalid number.")
@@ -1570,7 +1565,7 @@ async def admin_buy_ticket(message: Message, state: FSMContext):
     
     ticket_id, ticket_num = ticket
     
-    user = await DatabaseHelper.fetch_one("SELECT user_id, phone_number, full_name FROM users WHERE telegram_id = ?", (target_id,))
+    user = await DatabaseHelper.fetch_one("SELECT user_id, phone_number, full_name FROM users WHERE telegram_id = $1", target_id)
     if not user:
         await message.answer("❌ User not found!")
         return
@@ -1578,8 +1573,8 @@ async def admin_buy_ticket(message: Message, state: FSMContext):
     user_id, phone, name = user
     
     await DatabaseHelper.execute_transaction([
-        ("UPDATE tickets SET status = 'sold', user_id = ?, telegram_id = ?, phone_number = ?, assigned_at = CURRENT_TIMESTAMP WHERE ticket_id = ?", (user_id, target_id, phone, ticket_id)),
-        ("INSERT INTO payments (user_id, telegram_id, ticket_id, ticket_number, extracted_amount, status, admin_notes) VALUES (?, ?, ?, ?, 3000.0, 'approved', ?)", (user_id, target_id, ticket_id, ticket_num, "Admin purchase"))
+        ("UPDATE tickets SET status = 'sold', user_id = $1, telegram_id = $2, phone_number = $3, assigned_at = CURRENT_TIMESTAMP WHERE ticket_id = $4", user_id, target_id, phone, ticket_id),
+        ("INSERT INTO payments (user_id, telegram_id, ticket_id, ticket_number, extracted_amount, status, admin_notes) VALUES ($1, $2, $3, $4, 3000.0, 'approved', $5)", user_id, target_id, ticket_id, ticket_num, "Admin purchase")
     ])
     
     await state.clear()
@@ -1635,11 +1630,11 @@ async def admin_manual_process(message: Message, state: FSMContext):
         return
     
     cursor = await DatabaseHelper.execute(
-        "UPDATE tickets SET status = 'sold', assigned_at = CURRENT_TIMESTAMP WHERE ticket_number = ? AND status = 'available'",
-        (num,)
+        "UPDATE tickets SET status = 'sold', assigned_at = CURRENT_TIMESTAMP WHERE ticket_number = $1 AND status = 'available'",
+        num
     )
     
-    if cursor.rowcount > 0:
+    if cursor == "UPDATE 1" or (hasattr(cursor, 'rowcount') and cursor.rowcount > 0):
         await message.answer(f"✅ Ticket #{num} marked as sold!", reply_markup=admin_menu(uid))
     else:
         await message.answer(f"❌ Ticket #{num} not available.", reply_markup=admin_menu(uid))
@@ -1663,6 +1658,7 @@ async def main():
     logger.info("🚀 Bot started with PostgreSQL!")
     logger.info(f"👤 Admins: {ADMIN_IDS}")
     logger.info(f"🌐 WebApp: {WEBAPP_URL}")
+    logger.info(f"📊 Database: Connected to PostgreSQL")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
