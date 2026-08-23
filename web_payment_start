@@ -62,7 +62,7 @@ logger = logging.getLogger(__name__)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 router = Router()
-tg_bot = Bot(token=TOKEN)  # CHANGED: bot -> tg_bot
+tg_bot = Bot(token=TOKEN)  # CHANGED: tg_bot -> tg_bot
 
 # =====================================================
 # DATABASE
@@ -754,8 +754,8 @@ async def process_payment(message: Message, state: FSMContext):
     screenshot = ""
     if message.photo:
         photo = message.photo[-1]
-        file = await tg_bot.get_file(photo.file_id)  # CHANGED: bot -> tg_bot
-        downloaded = await tg_bot.download_file(file.file_path)  # CHANGED: bot -> tg_bot
+        file = await tg_bot.get_file(photo.file_id)  # CHANGED: tg_bot -> tg_bot
+        downloaded = await tg_bot.download_file(file.file_path)  # CHANGED: tg_bot -> tg_bot
         screenshot = base64.b64encode(downloaded.read()).decode('utf-8')
     
     result = await DB.execute(
@@ -772,12 +772,12 @@ async def process_payment(message: Message, state: FSMContext):
             msg = f"🔔 New Payment\n🎫 #{ticket_num}\n👤 {name} ({phone})\n🆔 {payment_id}"
             if screenshot:
                 img = base64.b64decode(screenshot)
-                await tg_bot.send_photo(admin, BufferedInputFile(img, filename="pay.jpg"), caption=msg, reply_markup=InlineKeyboardMarkup(inline_keyboard=[  # CHANGED: bot -> tg_bot
+                await tg_bot.send_photo(admin, BufferedInputFile(img, filename="pay.jpg"), caption=msg, reply_markup=InlineKeyboardMarkup(inline_keyboard=[  # CHANGED: tg_bot -> tg_bot
                     [InlineKeyboardButton(text="✅ Approve", callback_data=f"approve_{payment_id}")],
                     [InlineKeyboardButton(text="❌ Reject", callback_data=f"reject_{payment_id}")]
                 ]))
             else:
-                await tg_bot.send_message(admin, msg, reply_markup=InlineKeyboardMarkup(inline_keyboard=[  # CHANGED: bot -> tg_bot
+                await tg_bot.send_message(admin, msg, reply_markup=InlineKeyboardMarkup(inline_keyboard=[  # CHANGED: tg_bot -> tg_bot
                     [InlineKeyboardButton(text="✅ Approve", callback_data=f"approve_{payment_id}")],
                     [InlineKeyboardButton(text="❌ Reject", callback_data=f"reject_{payment_id}")]
                 ]))
@@ -828,7 +828,7 @@ async def approve_pay(callback: CallbackQuery):
     ])
     
     try:
-        await tg_bot.send_message(  # CHANGED: bot -> tg_bot
+        await tg_bot.send_message(  # CHANGED: tg_bot -> tg_bot
             TICKET_CHANNEL_ID,
             f"🎟️ Verified Ticket\n#{ticket_num}\n👤 {phone}\n💰 3,000 ETB\n✅ {datetime.now().strftime('%Y-%m-%d %H:%M')}"
         )
@@ -836,7 +836,7 @@ async def approve_pay(callback: CallbackQuery):
         pass
     
     try:
-        await tg_bot.send_message(tg_id, text(tg_id, "pay_approved", ticket=ticket_num))  # CHANGED: bot -> tg_bot
+        await tg_bot.send_message(tg_id, text(tg_id, "pay_approved", ticket=ticket_num))  # CHANGED: tg_bot -> tg_bot
     except:
         pass
     
@@ -863,7 +863,7 @@ async def reject_pay(callback: CallbackQuery):
         await DB.execute("UPDATE tickets SET status = 'available', user_id = NULL, telegram_id = NULL, phone_number = NULL WHERE ticket_id = $1", payment[1])
         await DB.execute("UPDATE payments SET status = 'rejected', verified_by = $1 WHERE payment_id = $2", uid, payment_id)
         try:
-            await tg_bot.send_message(payment[0], text(payment[0], "pay_rejected"))  # CHANGED: bot -> tg_bot
+            await tg_bot.send_message(payment[0], text(payment[0], "pay_rejected"))  # CHANGED: tg_bot -> tg_bot
         except:
             pass
     
@@ -1071,7 +1071,7 @@ async def refund_user(callback: CallbackQuery):
     ])
     
     try:
-        await tg_bot.send_message(tg_id, text(tg_id, "refund_complete", amount=balance))  # CHANGED: bot -> tg_bot
+        await tg_bot.send_message(tg_id, text(tg_id, "refund_complete", amount=balance))  # CHANGED: tg_bot -> tg_bot
     except:
         pass
     
@@ -1100,7 +1100,7 @@ async def refund_all(callback: CallbackQuery):
         ])
         total += balance
         try:
-            await tg_bot.send_message(tg_id, text(tg_id, "refund_complete", amount=balance))  # CHANGED: bot -> tg_bot
+            await tg_bot.send_message(tg_id, text(tg_id, "refund_complete", amount=balance))  # CHANGED: tg_bot -> tg_bot
         except:
             pass
         await asyncio.sleep(0.05)
@@ -1146,7 +1146,7 @@ async def send_broadcast(message: Message, state: FSMContext):
     sent = 0
     for user in users:
         try:
-            await tg_bot.send_message(user[0], f"📢 {msg}")  # CHANGED: bot -> tg_bot
+            await tg_bot.send_message(user[0], f"📢 {msg}")  # CHANGED: tg_bot -> tg_bot
             sent += 1
             await asyncio.sleep(0.05)
         except:
@@ -1286,7 +1286,7 @@ async def admin_buy_ticket(message: Message, state: FSMContext):
     await message.answer(f"✅ Ticket #{ticket_num} assigned to user {target_id}!\n👤 {name}\n📱 {phone}", reply_markup=admin_kb(uid))
     
     try:
-        await tg_bot.send_message(target_id, f"🎉 Admin purchased ticket #{ticket_num} for you!")  # CHANGED: bot -> tg_bot
+        await tg_bot.send_message(target_id, f"🎉 Admin purchased ticket #{ticket_num} for you!")  # CHANGED: tg_bot -> tg_bot
     except:
         pass
 
@@ -1336,7 +1336,7 @@ async def admin_manual_process(message: Message, state: FSMContext):
 # =====================================================
 
 async def set_commands():
-    await tg_bot.set_my_commands([  # CHANGED: bot -> tg_bot
+    await tg_bot.set_my_commands([  # CHANGED: tg_bot -> tg_bot
         BotCommand(command="start", description="🏠 Start"),
         BotCommand(command="admin", description="🛠️ Admin"),
     ])
@@ -1347,7 +1347,7 @@ async def main():
     await set_commands()
     
     try:
-        await tg_bot.delete_webhook(drop_pending_updates=True)  # CHANGED: bot -> tg_bot
+        await tg_bot.delete_webhook(drop_pending_updates=True)  # CHANGED: tg_bot -> tg_bot
     except:
         pass
     
@@ -1358,7 +1358,7 @@ async def main():
     logger.info(f"👤 Admins: {ADMIN_IDS}")
     logger.info(f"🌐 WebApp: {WEBAPP_URL}")
     
-    await dp.start_polling(tg_bot, allowed_updates=["message", "callback_query"], skip_updates=True)  # CHANGED: bot -> tg_bot
+    await dp.start_polling(tg_bot, allowed_updates=["message", "callback_query"], skip_updates=True)  # CHANGED: tg_bot -> tg_bot
 
 if __name__ == "__main__":
     try:
