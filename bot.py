@@ -589,24 +589,25 @@ async def process_ticket_number(message: Message, state: FSMContext):
 # CHOOSE BLOCK - FIXED: 100 ticket blocks instead of 1000
 # =====================================================
 
+
+
 @router.message(F.text.in_(["📦 Choose Block", "📦 ብሎክ ምረጥ"]))
 async def choose_block(message: Message, state: FSMContext):
     uid = message.from_user.id
     
-    # Create 100-ticket blocks (1-100, 101-200, ... up to 20000)
+    # Create 50-ticket blocks (1-50, 51-100, ... up to 20000)
     kb_rows = []
     row = []
-    for i in range(1, 20001, 100):
+    for i in range(1, 20001, 50):  # ← Changed from 100 to 50
         start = i
-        end = min(i + 99, 20000)
+        end = min(i + 49, 20000)   # ← Changed from 99 to 49
         row.append(KeyboardButton(text=f"{start}-{end}"))
-        if len(row) == 5:  # 5 blocks per row
+        if len(row) == 5:
             kb_rows.append(row)
             row = []
     if row:
         kb_rows.append(row)
     
-    # Add Back button
     kb_rows.append([KeyboardButton(text=get_text(uid, "back"))])
     
     kb = ReplyKeyboardMarkup(keyboard=kb_rows, resize_keyboard=True)
