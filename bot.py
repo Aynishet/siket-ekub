@@ -842,7 +842,7 @@ async def cmd_start(message: Message, state: FSMContext):
     kb = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="🤖 የቴሌግራም አማራጭ/Telegram")],
-            [KeyboardButton(text="🌐 የድረገጽ ክፈት/Website")],
+            [KeyboardButton(text="🌐 የድረገጽ አማራጭ/Website")],
             [KeyboardButton(text="ℹ️ ስለ ሲኬት ዕቁብ")]
         ],
         resize_keyboard=True
