@@ -54,22 +54,119 @@ if not TOKEN or not ADMIN_IDS:
 # POSTGRESQL DATABASE URL
 # =====================================================
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://siket_ekub_user:TPgM4oBmNyD3WMR5slAdWXjA0lvn2vkH@dpg-da4ucgnqj5pc73b8bt5g-a/siket_ekub")
+# =====================================================
+# POSTGRESQL CONNECTION AND INITIALIZATION
+# =====================================================
 
-if not DATABASE_URL:
-    raise ValueError("DATABASE_URL is missing! Required for PostgreSQL.")
+db_pool = None
 
-WEBAPP_URL = os.getenv("WEBAPP_URL", "https://siket-ekub-webapp.onrender.com")
-SUPPORT_CHANNEL_LINK = os.getenv("SUPPORT_CHANNEL_LINK", "https://t.me/siketekub")
-TICKET_CHANNEL_LINK = os.getenv("TICKET_CHANNEL_LINK", "https://t.me/siketekubtiketo")
-TICKET_CHANNEL_ID = os.getenv("TICKET_CHANNEL_ID", "@siketekubtiketo")
+async def get_db_pool():
+    """Get or create PostgreSQL connection pool"""
+    global db_pool
+    if db_pool is None:
+        db_pool = await asyncpg.create_pool(
+            DATABASE_URL,
+            min_size=2,
+            max_size=10,
+            command_timeout=60
+        )
+        logger.info("✅ PostgreSQL connection pool created")
+    return db_pool
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
-
-storage = MemoryStorage()
-bot = Bot(token=TOKEN)
-dp = Dispatcher(storage=storage)
-router = Router()
+async def init_db_postgres():
+    """Initialize PostgreSQL tables"""
+    pool = await get_db_pool()
+    
+    async with pool.acquire() as conn:
+        # Users table
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                user_id SERIAL PRIMARY KEY,
+                telegram_id BIGINT UNIQUE NOT NULL,
+                full_name VARCHAR(255),
+                phone_number VARCHAR(20),
+                address TEXT,
+                balance DECIMAL(15,2) DEFAULT 0,
+                total_spent DECIMAL(15,2) DEFAULT 0,
+                language VARCHAR(10) DEFAULT 'en',
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Ticket types table
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS ticket_types (
+                type_id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                price DECIMAL(15,2) NOT NULL,
+                total_slots INTEGER NOT NULL,
+                prizes TEXT,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Tickets table
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS tickets (
+                ticket_id SERIAL PRIMARY KEY,
+                type_id INTEGER REFERENCES ticket_types(type_id),
+                ticket_number INTEGER NOT NULL,
+                status VARCHAR(20) DEFAULT 'available',
+                user_id INTEGER REFERENCES users(user_id),
+                telegram_id BIGINT,
+                phone_number VARCHAR(20),
+                assigned_at TIMESTAMP,
+                UNIQUE(type_id, ticket_number)
+            )
+        """)
+        
+        # Payments table
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS payments (
+                payment_id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(user_id),
+                telegram_id BIGINT,
+                phone_number VARCHAR(20),
+                ticket_id INTEGER REFERENCES tickets(ticket_id),
+                ticket_number INTEGER,
+                raw_sms TEXT,
+                extracted_ref VARCHAR(100),
+                extracted_amount DECIMAL(15,2),
+                extracted_date VARCHAR(50),
+                status VARCHAR(20) DEFAULT 'pending',
+                screenshot_data TEXT,
+                admin_notes TEXT,
+                verified_by INTEGER,
+                verified_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Refunds table
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS refunds (
+                refund_id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(user_id),
+                telegram_id BIGINT,
+                phone_number VARCHAR(20),
+                refund_amount DECIMAL(15,2),
+                refund_reason TEXT,
+                status VARCHAR(20) DEFAULT 'pending',
+                processed_by INTEGER,
+                processed_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Create indexes for performance
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_tickets_telegram_id ON tickets(telegram_id)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_payments_telegram_id ON payments(telegram_id)")
+        
+        logger.info("✅ PostgreSQL tables and indexes created/verified")
 
 # =====================================================
 # DATABASE HELPER - POSTGRESQL VERSION
