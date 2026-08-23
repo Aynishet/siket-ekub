@@ -75,7 +75,7 @@ logger = logging.getLogger(__name__)
 storage = MemoryStorage()
 bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=storage)
-router = Router()  # <-- CRITICAL: router must be defined here
+router = Router()
 
 # =====================================================
 # POSTGRESQL CONNECTION AND INITIALIZATION
@@ -197,7 +197,7 @@ async def init_db_postgres():
 
 class DatabaseHelper:
     @staticmethod
-    async def execute(query: str, params: tuple = None):
+    async def execute(query: str, *params):
         pool = await get_db_pool()
         async with pool.acquire() as conn:
             if params:
@@ -209,7 +209,7 @@ class DatabaseHelper:
         pool = await get_db_pool()
         async with pool.acquire() as conn:
             async with conn.transaction():
-                for query, params in queries:
+                for query, *params in queries:
                     if params:
                         await conn.execute(query, *params)
                     else:
@@ -217,7 +217,7 @@ class DatabaseHelper:
                 return True
     
     @staticmethod
-    async def fetch(query: str, params: tuple = None):
+    async def fetch(query: str, *params):
         pool = await get_db_pool()
         async with pool.acquire() as conn:
             if params:
@@ -225,7 +225,7 @@ class DatabaseHelper:
             return await conn.fetch(query)
     
     @staticmethod
-    async def fetch_one(query: str, params: tuple = None):
+    async def fetch_one(query: str, *params):
         pool = await get_db_pool()
         async with pool.acquire() as conn:
             if params:
@@ -233,7 +233,7 @@ class DatabaseHelper:
             return await conn.fetchrow(query)
     
     @staticmethod
-    async def fetch_val(query: str, params: tuple = None):
+    async def fetch_val(query: str, *params):
         """Fetch a single value"""
         pool = await get_db_pool()
         async with pool.acquire() as conn:
@@ -470,7 +470,7 @@ async def start_cmd(message: Message, state: FSMContext):
     uid = message.from_user.id
     await state.clear()
     
-    user = await DatabaseHelper.fetch_one("SELECT * FROM users WHERE telegram_id = $1", (uid,))
+    user = await DatabaseHelper.fetch_one("SELECT * FROM users WHERE telegram_id = $1", uid)
     
     if user:
         lang = user[8] if len(user) > 8 else "en"
@@ -827,7 +827,7 @@ async def process_payment(message: Message, state: FSMContext):
         await state.clear()
         return
     
-    user = await DatabaseHelper.fetch_one("SELECT user_id, phone_number, full_name FROM users WHERE telegram_id = $1", (uid,))
+    user = await DatabaseHelper.fetch_one("SELECT user_id, phone_number, full_name FROM users WHERE telegram_id = $1", uid)
     if not user:
         await message.answer("❌ Please /start first.")
         return
@@ -841,11 +841,11 @@ async def process_payment(message: Message, state: FSMContext):
         downloaded = await bot.download_file(file.file_path)
         screenshot = base64.b64encode(downloaded.read()).decode('utf-8')
     
-    cursor = await DatabaseHelper.execute(
+    result = await DatabaseHelper.execute(
         "INSERT INTO payments (user_id, telegram_id, ticket_id, ticket_number, status, screenshot_data) VALUES ($1, $2, $3, $4, 'pending', $5) RETURNING payment_id",
         user_id, uid, ticket_id, ticket_num, screenshot
     )
-    payment_id = cursor[0] if isinstance(cursor, tuple) else cursor
+    payment_id = result[0] if result else None
     
     await state.clear()
     await message.answer(
@@ -906,12 +906,12 @@ async def approve_pay(callback: CallbackQuery):
     
     tg_id, ticket_id, ticket_num = payment
     
-    cursor = await DatabaseHelper.execute(
+    result = await DatabaseHelper.execute(
         "UPDATE tickets SET status = 'sold', telegram_id = $1, assigned_at = CURRENT_TIMESTAMP WHERE ticket_id = $2 AND status = 'available'",
         tg_id, ticket_id
     )
     
-    if cursor == "UPDATE 0" or (hasattr(cursor, 'rowcount') and cursor.rowcount == 0):
+    if result and "UPDATE 0" in result:
         await DatabaseHelper.execute(
             "UPDATE payments SET status = 'rejected', admin_notes = 'Ticket already sold' WHERE payment_id = $1",
             payment_id
@@ -1086,7 +1086,7 @@ async def change_lang(callback: CallbackQuery):
     await callback.answer()
 
 # =====================================================
-# ADMIN COMMANDS - FIXED: Responsive
+# ADMIN COMMANDS
 # =====================================================
 
 @router.message(F.text == "🛠️ Admin Panel")
@@ -1160,20 +1160,19 @@ async def create_game_slots(message: Message, state: FSMContext):
     name = data.get("name")
     prizes = data.get("prizes")
     
-    cursor = await DatabaseHelper.execute(
+    result = await DatabaseHelper.execute(
         "INSERT INTO ticket_types (name, price, total_slots, is_active, prizes) VALUES ($1, 3000, $2, true, $3) RETURNING type_id",
         name, slots, prizes
     )
-    type_id = cursor[0] if isinstance(cursor, tuple) else cursor
+    type_id = result[0] if result else None
     
     batch_size = 1000
     for start in range(1, slots + 1, batch_size):
         end = min(start + batch_size - 1, slots)
-        values = [(type_id, i, 'available') for i in range(start, end + 1)]
-        for val in values:
+        for i in range(start, end + 1):
             await DatabaseHelper.execute(
-                "INSERT INTO tickets (type_id, ticket_number, status) VALUES ($1, $2, $3)",
-                val[0], val[1], val[2]
+                "INSERT INTO tickets (type_id, ticket_number, status) VALUES ($1, $2, 'available')",
+                type_id, i
             )
         logger.info(f"Created tickets {start}-{end}")
     
@@ -1629,12 +1628,12 @@ async def admin_manual_process(message: Message, state: FSMContext):
         await message.answer("❌ Invalid number.")
         return
     
-    cursor = await DatabaseHelper.execute(
+    result = await DatabaseHelper.execute(
         "UPDATE tickets SET status = 'sold', assigned_at = CURRENT_TIMESTAMP WHERE ticket_number = $1 AND status = 'available'",
         num
     )
     
-    if cursor == "UPDATE 1" or (hasattr(cursor, 'rowcount') and cursor.rowcount > 0):
+    if result and "UPDATE 1" in result:
         await message.answer(f"✅ Ticket #{num} marked as sold!", reply_markup=admin_menu(uid))
     else:
         await message.answer(f"❌ Ticket #{num} not available.", reply_markup=admin_menu(uid))
@@ -1654,12 +1653,27 @@ async def set_commands():
 async def main():
     await init_db_postgres()
     await set_commands()
+    
+    # Clear webhook and drop pending updates to avoid conflict
+    try:
+        await bot.delete_webhook(drop_pending_updates=True)
+        logger.info("✅ Webhook cleared")
+    except Exception as e:
+        logger.warning(f"⚠️ Could not delete webhook: {e}")
+    
+    await asyncio.sleep(1)
+    
     dp.include_router(router)
     logger.info("🚀 Bot started with PostgreSQL!")
     logger.info(f"👤 Admins: {ADMIN_IDS}")
     logger.info(f"🌐 WebApp: {WEBAPP_URL}")
     logger.info(f"📊 Database: Connected to PostgreSQL")
-    await dp.start_polling(bot)
+    
+    await dp.start_polling(
+        bot,
+        allowed_updates=["message", "callback_query"],
+        skip_updates=True
+    )
 
 if __name__ == "__main__":
     try:
