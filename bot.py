@@ -276,7 +276,7 @@ TEXTS = {
         "broadcast_sent": "✅ Sent to {sent}/{total} users.",
         "support_info": "💬 Support: {channel}",
         "your_tickets": "🎫 Your tickets:\n",
-        "choose_interface": "🎰 Choose how to play:",
+        "choose_interface": "🎰 start_command",
         "use_telegram": "🤖 Use Telegram",
         "open_web": "🌐 Open Web",
         "about": "ℹ️ About",
@@ -466,7 +466,7 @@ async def start_cmd(message: Message, state: FSMContext):
         lang = user[8] if len(user) > 8 else "en"
         LangCache.set(uid, lang)
         await message.answer(
-            f"🎰 **Siket Ekub Lottery**\n\nChoose how to play:",
+            f"🎰 **Siket Ekub Lottery**\ስኬት እቁብ\nChoose how to play",
             reply_markup=choice_menu(),
             parse_mode="Markdown"
         )
@@ -580,7 +580,7 @@ async def open_web(message: Message):
     ])
     
     await message.answer(
-        f"🌐 Web Interface Loaded!\n👤 User: {name}\n📱 Phone: {phone}\n💰 Balance: {balance} ETB",
+        # f"🌐 Web Interface Loaded!\n👤 User: {name}\n📱 Phone: {phone}\n💰 Balance: {balance} ETB",
         reply_markup=kb,
         parse_mode="Markdown"
     )
@@ -588,13 +588,16 @@ async def open_web(message: Message):
 @router.message(F.text == "ℹ️ About")
 async def about(message: Message):
     await message.answer(
-        "🎰 **Siket Ekub Lottery**\n\n"
+        "🎰 Siket Ekub\n\n"
         "💰 Price: 3,000 ETB\n\n"
         "🏆 **10 PRIZES:**\n"
         "1st: BWD Leopard 3 (8,000,000 ETB)\n"
         "2nd: Hyundai Bayon (5,000,000 ETB)\n"
         "3rd: Shop Space (4,000,000 ETB)\n"
-        "4th-7th: 1,000,000 ETB each\n"
+        "4th: 1,000,000 ETB each\n"
+        "5th: 1,000,000 ETB each\n"
+        "6th: 1,000,000 ETB each\n"
+        "7th: 1,000,000 ETB each\n"
         "8th: 500,000 ETB\n"
         "9th: 300,000 ETB\n"
         "10th: 200,000 ETB\n\n"
