@@ -21,7 +21,8 @@ services:
       
       # ====== DATABASE ======
       - key: DATABASE_URL
-        value: postgresql://siket_ekub_user:TPgM4oBmNyD3WMR5slAdWXjA0lvn2vkH@dpg-da4ucgnqj5pc73b8bt5g-a/siket_ekub  # ← Your Render PostgreSQL URL
+        value: postgresql://siket_ekub_db_user:gHypaB8nbbKmWfLKAE89iXkheKFlIpl7@dpg-da6u0pfavr4c739kvtng-a/siket_ekub_db
+        # ← Your Render PostgreSQL URL
       
       # ====== WEBAPP URL ======
       - key: WEBAPP_URL
