@@ -40,7 +40,7 @@ ssl._create_default_https_context = ssl._create_unverified_context
 basedir = os.path.abspath(os.path.dirname(__file__))
 load_dotenv(os.path.join(basedir, '.env'))
 
-TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 admin_ids_raw = os.getenv("ADMIN_IDS", "")
 ADMIN_IDS = [int(x.strip()) for x in admin_ids_raw.split(",") if x.strip()]
 
