@@ -2,7 +2,8 @@
 import csv
 import io
 import os
-import sqlite3
+import psycopg2
+import psycopg2.extras
 import sys
 import json
 import base64
@@ -18,17 +19,31 @@ app = Flask(
     static_folder=os.path.join(BASE_DIR, "static"),
 )
 
-DB_NAME = os.path.join(BASE_DIR, 'instance', 'siket_ekub.db')
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL is not configured")
 
 def get_db_connection():
     try:
-        conn = sqlite3.connect(DB_NAME)
-        conn.row_factory = sqlite3.Row
+        conn = psycopg2.connect(DATABASE_URL)
         return conn
     except Exception as e:
-        print(f"Database connection error: {e}")
+        print(f"PostgreSQL connection error: {e}")
+        return None
+def fetchone_dict(cursor):
+    row = cursor.fetchone()
+    if row is None:
         return None
 
+    columns = [desc[0] for desc in cursor.description]
+    return dict(zip(columns, row))
+
+
+def fetchall_dict(cursor):
+    rows = cursor.fetchall()
+    columns = [desc[0] for desc in cursor.description]
+    return [dict(zip(columns, row)) for row in rows]
 def row_to_dict(row):
     if row is None:
         return None
@@ -421,244 +436,689 @@ def api_get_tickets():
 
 @app.route('/api/tickets/assign', methods=['POST'])
 def api_assign_ticket():
-    """Assign tickets to a user"""
+    """Reserve available tickets for a user as pending."""
+    conn = None
+
     try:
-        data = request.json
+        data = request.get_json(silent=True) or {}
+
         telegram_id = data.get('telegram_id')
         ticket_ids = data.get('ticket_ids', [])
-        
+
+        if not telegram_id:
+            return jsonify({
+                'success': False,
+                'error': 'Telegram ID is required'
+            }), 400
+
         if not ticket_ids:
-            return jsonify({'success': False, 'error': 'No tickets selected'}), 400
-        
+            return jsonify({
+                'success': False,
+                'error': 'No tickets selected'
+            }), 400
+
         conn = get_db_connection()
+
         if not conn:
-            return jsonify({'success': False, 'error': 'Database connection failed'}), 500
-        
+            return jsonify({
+                'success': False,
+                'error': 'Database connection failed'
+            }), 500
+
         cursor = conn.cursor()
-        
+
+        # --------------------------------------------------
         # Get user
-        cursor.execute(
-            "SELECT user_id, phone_number FROM users WHERE telegram_id = ?",
-            (telegram_id,)
-        )
+        # --------------------------------------------------
+        cursor.execute("""
+            SELECT user_id, phone_number
+            FROM users
+            WHERE telegram_id = %s
+            LIMIT 1
+        """, (telegram_id,))
+
         user = cursor.fetchone()
-        
+
         if not user:
-            conn.close()
-            return jsonify({'success': False, 'error': 'User not found'}), 404
-        
-        user_id = user['user_id']
-        phone = user['phone_number']
-        
+            conn.rollback()
+
+            return jsonify({
+                'success': False,
+                'error': 'User not found'
+            }), 404
+
+        user_id = user[0]
+        phone = user[1]
+
         assigned = []
         failed = []
-        
+
+        # --------------------------------------------------
+        # Reserve tickets as PENDING
+        # --------------------------------------------------
         for ticket_id in ticket_ids:
+
             cursor.execute("""
-                UPDATE tickets 
-                SET status = 'sold', user_id = ?, telegram_id = ?, phone_number = ?, assigned_at = CURRENT_TIMESTAMP 
-                WHERE ticket_id = ? AND status = 'available'
-            """, (user_id, telegram_id, phone, ticket_id))
-            
+                UPDATE tickets
+                SET
+                    status = 'pending',
+                    user_id = %s,
+                    telegram_id = %s,
+                    phone_number = %s
+                WHERE ticket_id = %s
+                  AND status = 'available'
+            """, (
+                user_id,
+                telegram_id,
+                phone,
+                ticket_id
+            ))
+
             if cursor.rowcount > 0:
                 assigned.append(ticket_id)
             else:
                 failed.append(ticket_id)
-        
+
         conn.commit()
-        conn.close()
-        
+
         return jsonify({
             'success': True,
             'assigned': assigned,
             'failed': failed,
-            'message': f'{len(assigned)} tickets assigned, {len(failed)} failed'
+            'message': (
+                f'{len(assigned)} tickets reserved, '
+                f'{len(failed)} failed'
+            )
         })
-        
+
     except Exception as e:
-        print(f"Error assigning ticket: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+
+        if conn:
+            conn.rollback()
+
+        print(f"Error assigning tickets: {e}")
+
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+    finally:
+
+        if conn:
+            conn.close()
 
 # =====================================================
 # PAYMENT API ROUTES
 # =====================================================
-
 @app.route('/api/payments/create', methods=['POST'])
 def api_create_payment():
-    """Create a pending payment with screenshot"""
-    try:
-        data = request.json
-        
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({'success': False, 'error': 'Database connection failed'}), 500
-        
-        cursor = conn.cursor()
-        
-        # Get user
-        cursor.execute(
-            "SELECT user_id, phone_number FROM users WHERE telegram_id = ?",
-            (data.get('telegram_id'),)
-        )
-        user = cursor.fetchone()
-        
-        if not user:
-            conn.close()
-            return jsonify({'success': False, 'error': 'User not found'}), 404
-        
-        # Get ticket
-        cursor.execute(
-            "SELECT ticket_number FROM tickets WHERE ticket_id = ?",
-            (data.get('ticket_id'),)
-        )
-        ticket = cursor.fetchone()
-        
-        if not ticket:
-            conn.close()
-            return jsonify({'success': False, 'error': 'Ticket not found'}), 404
-        
-        # Insert payment
-        cursor.execute("""
-            INSERT INTO payments 
-            (user_id, telegram_id, phone_number, ticket_id, ticket_number, 
-             raw_sms, extracted_ref, extracted_amount, extracted_date, status, screenshot_data)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
-        """, (
-            user['user_id'],
-            data.get('telegram_id'),
-            user['phone_number'],
-            data.get('ticket_id'),
-            ticket['ticket_number'],
-            data.get('raw_sms', ''),
-            data.get('extracted_ref', ''),
-            data.get('extracted_amount', 0),
-            datetime.now().isoformat(),
-            data.get('screenshot_data', '')
-        ))
-        
-        payment_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-        
-        return jsonify({'success': True, 'payment_id': payment_id})
-        
-    except Exception as e:
-        print(f"Error creating payment: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+    """
+    Create a pending payment in the SAME PostgreSQL database
+    used by the Telegram bot.
 
+    The ticket is changed from available -> pending atomically.
+    """
+    conn = None
+
+    try:
+        data = request.get_json(silent=True) or {}
+
+        telegram_id = data.get('telegram_id')
+        ticket_id = data.get('ticket_id')
+        extracted_ref = (data.get('extracted_ref') or '').strip()
+        raw_sms = data.get('raw_sms') or extracted_ref
+        extracted_amount = float(data.get('extracted_amount') or 0)
+        screenshot_data = data.get('screenshot_data') or ''
+
+        if not telegram_id:
+            return jsonify({
+                'success': False,
+                'error': 'Telegram ID is required'
+            }), 400
+
+        if not ticket_id:
+            return jsonify({
+                'success': False,
+                'error': 'Ticket ID is required'
+            }), 400
+
+        if extracted_amount <= 0:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid payment amount'
+            }), 400
+
+        if not extracted_ref and not screenshot_data:
+            return jsonify({
+                'success': False,
+                'error': 'Transaction reference or receipt is required'
+            }), 400
+
+        conn = get_db_connection()
+
+        if not conn:
+            return jsonify({
+                'success': False,
+                'error': 'Database connection failed'
+            }), 500
+
+        cursor = conn.cursor()
+
+        # -------------------------------------------------
+        # 1. Get user
+        # -------------------------------------------------
+        cursor.execute("""
+            SELECT
+                user_id,
+                telegram_id,
+                phone_number,
+                full_name
+            FROM users
+            WHERE telegram_id = %s
+            LIMIT 1
+        """, (telegram_id,))
+
+        user = cursor.fetchone()
+
+        if not user:
+            conn.rollback()
+            return jsonify({
+                'success': False,
+                'error': 'User not found. Please register first.'
+            }), 404
+
+        user_id, tg_id, phone_number, full_name = user
+
+        # -------------------------------------------------
+        # 2. Lock the ticket
+        # -------------------------------------------------
+        cursor.execute("""
+            SELECT
+                ticket_id,
+                ticket_number,
+                status,
+                user_id,
+                telegram_id
+            FROM tickets
+            WHERE ticket_id = %s
+            FOR UPDATE
+        """, (ticket_id,))
+
+        ticket = cursor.fetchone()
+
+        if not ticket:
+            conn.rollback()
+            return jsonify({
+                'success': False,
+                'error': 'Ticket not found'
+            }), 404
+
+        (
+            db_ticket_id,
+            ticket_number,
+            ticket_status,
+            existing_user_id,
+            existing_telegram_id
+        ) = ticket
+
+        # -------------------------------------------------
+        # 3. Ticket must still be available
+        # -------------------------------------------------
+        if ticket_status != 'available':
+            conn.rollback()
+
+            return jsonify({
+                'success': False,
+                'error': f'Ticket #{ticket_number} is no longer available'
+            }), 409
+
+        # -------------------------------------------------
+        # 4. Lock ticket as pending
+        # -------------------------------------------------
+        cursor.execute("""
+            UPDATE tickets
+            SET
+                status = 'pending',
+                user_id = %s,
+                telegram_id = %s,
+                phone_number = %s
+            WHERE ticket_id = %s
+              AND status = 'available'
+        """, (
+            user_id,
+            telegram_id,
+            phone_number,
+            ticket_id
+        ))
+
+        if cursor.rowcount != 1:
+            conn.rollback()
+
+            return jsonify({
+                'success': False,
+                'error': 'Ticket was just taken by another user'
+            }), 409
+
+        # -------------------------------------------------
+        # 5. Create pending payment
+        # -------------------------------------------------
+        cursor.execute("""
+            INSERT INTO payments (
+                user_id,
+                telegram_id,
+                phone_number,
+                ticket_id,
+                ticket_number,
+                raw_sms,
+                extracted_ref,
+                extracted_amount,
+                extracted_date,
+                status,
+                screenshot_data
+            )
+            VALUES (
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                CURRENT_TIMESTAMP,
+                'pending',
+                %s
+            )
+            RETURNING payment_id
+        """, (
+            user_id,
+            telegram_id,
+            phone_number,
+            ticket_id,
+            ticket_number,
+            raw_sms,
+            extracted_ref,
+            extracted_amount,
+            screenshot_data
+        ))
+
+        payment_id = cursor.fetchone()[0]
+
+        # -------------------------------------------------
+        # 6. Commit BOTH operations together
+        # -------------------------------------------------
+        conn.commit()
+
+        return jsonify({
+            'success': True,
+            'payment_id': payment_id,
+            'ticket_id': ticket_id,
+            'ticket_number': ticket_number,
+            'status': 'pending',
+            'message': 'Payment submitted successfully and is waiting for admin approval.'
+        })
+
+    except Exception as e:
+        if conn:
+            conn.rollback()
+
+        print(f"ERROR /api/payments/create: {e}")
+
+        return jsonify({
+            'success': False,
+            'error': 'Payment submission failed'
+        }), 500
+
+    finally:
+        if conn:
+            conn.close()
 @app.route('/api/payments/pending', methods=['GET'])
 def api_pending_payments():
-    """Get all pending payments"""
+    """Return all pending payments from the shared PostgreSQL database."""
+
+    conn = None
+
     try:
         conn = get_db_connection()
+
         if not conn:
-            return jsonify({'error': 'Database connection failed'}), 500
-        
+            return jsonify({
+                'success': False,
+                'error': 'Database connection failed'
+            }), 500
+
         cursor = conn.cursor()
-        
-        try:
-            cursor.execute("""
-                SELECT p.payment_id, p.telegram_id, p.ticket_number, p.extracted_amount, 
-                       p.created_at, p.status, u.full_name, u.phone_number,
-                       p.screenshot_data
-                FROM payments p
-                JOIN users u ON p.user_id = u.user_id
-                WHERE p.status = 'pending'
-                ORDER BY p.created_at ASC
-            """)
-            columns = [description[0] for description in cursor.description]
-            payments = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        except sqlite3.OperationalError:
-            cursor.execute("""
-                SELECT p.payment_id, p.telegram_id, p.ticket_number, p.extracted_amount, 
-                       p.created_at, p.status, u.full_name, u.phone_number
-                FROM payments p
-                JOIN users u ON p.user_id = u.user_id
-                WHERE p.status = 'pending'
-                ORDER BY p.created_at ASC
-            """)
-            columns = [description[0] for description in cursor.description]
-            payments = [dict(zip(columns, row)) for row in cursor.fetchall()]
-            for payment in payments:
-                payment['has_screenshot'] = False
-        
-        conn.close()
-        return jsonify({'success': True, 'payments': payments})
-        
+
+        cursor.execute("""
+            SELECT
+                p.payment_id,
+                p.user_id,
+                p.telegram_id,
+                p.phone_number,
+                p.ticket_id,
+                p.ticket_number,
+                p.raw_sms,
+                p.extracted_ref,
+                p.extracted_amount,
+                p.extracted_date,
+                p.status,
+                p.screenshot_data,
+                p.created_at,
+                u.full_name
+            FROM payments p
+            LEFT JOIN users u
+                ON p.user_id = u.user_id
+            WHERE p.status = 'pending'
+            ORDER BY p.created_at ASC
+        """)
+
+        payments = fetchall_dict(cursor)
+
+        for payment in payments:
+            payment['has_screenshot'] = bool(
+                payment.get('screenshot_data')
+            )
+
+            # Do not send the huge base64 image through the
+            # pending-list JSON.
+            payment.pop('screenshot_data', None)
+
+        return jsonify({
+            'success': True,
+            'count': len(payments),
+            'payments': payments
+        })
+
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"ERROR /api/payments/pending: {e}")
+
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+    finally:
+        if conn:
+            conn.close()
 
 @app.route('/api/payments/<int:payment_id>/screenshot', methods=['GET'])
 def api_payment_screenshot(payment_id):
-    """Get payment screenshot"""
+
+    conn = None
+
     try:
         conn = get_db_connection()
+
         if not conn:
-            return jsonify({'error': 'Database connection failed'}), 500
-        
+            return jsonify({
+                'success': False,
+                'error': 'Database connection failed'
+            }), 500
+
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT screenshot_data FROM payments WHERE payment_id = ?",
-            (payment_id,)
-        )
+
+        cursor.execute("""
+            SELECT screenshot_data
+            FROM payments
+            WHERE payment_id = %s
+        """, (payment_id,))
+
         result = cursor.fetchone()
-        conn.close()
-        
+
         if not result or not result[0]:
-            return jsonify({'error': 'No screenshot found'}), 404
-        
+            return jsonify({
+                'success': False,
+                'error': 'No screenshot found'
+            }), 404
+
         image_data = base64.b64decode(result[0])
+
         return send_file(
             io.BytesIO(image_data),
-            mimetype='image/png',
+            mimetype='image/jpeg',
             as_attachment=False,
-            download_name=f'payment_{payment_id}.png'
+            download_name=f'payment_{payment_id}.jpg'
         )
-        
+
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"Screenshot error: {e}")
+
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+    finally:
+        if conn:
+            conn.close()
 
 @app.route('/api/payments/verify', methods=['POST'])
 def api_verify_payment():
-    """Verify a payment (admin)"""
+    """
+    Approve or reject a pending payment.
+
+    APPROVE:
+        payment pending -> approved
+        ticket pending  -> sold
+        user balance updated
+
+    REJECT:
+        payment pending -> rejected
+        ticket pending  -> available
+    """
+
+    conn = None
+
     try:
-        data = request.json
+        data = request.get_json(silent=True) or {}
+
         payment_id = data.get('payment_id')
-        status = data.get('status', 'approved')
-        admin_id = data.get('admin_id', 1)
-        notes = data.get('notes', '')
-        
+        status = (data.get('status') or 'approved').lower()
+        admin_id = data.get('admin_id')
+        notes = data.get('notes') or ''
+
+        if not payment_id:
+            return jsonify({
+                'success': False,
+                'error': 'Payment ID is required'
+            }), 400
+
+        if status not in ('approved', 'rejected'):
+            return jsonify({
+                'success': False,
+                'error': 'Status must be approved or rejected'
+            }), 400
+
         conn = get_db_connection()
+
         if not conn:
-            return jsonify({'error': 'Database connection failed'}), 500
-        
+            return jsonify({
+                'success': False,
+                'error': 'Database connection failed'
+            }), 500
+
         cursor = conn.cursor()
+
+        # -------------------------------------------------
+        # Lock payment
+        # -------------------------------------------------
         cursor.execute("""
-            UPDATE payments 
-            SET status = ?, verified_by = ?, verified_at = CURRENT_TIMESTAMP, admin_notes = ?
-            WHERE payment_id = ? AND status = 'pending'
-        """, (status, admin_id, notes, payment_id))
-        
-        if cursor.rowcount > 0:
-            if status == 'approved':
-                cursor.execute("""
-                    UPDATE users 
-                    SET balance = COALESCE(balance, 0) + (
-                        SELECT extracted_amount FROM payments WHERE payment_id = ?
-                    )
-                    WHERE user_id = (
-                        SELECT user_id FROM payments WHERE payment_id = ?
-                    )
-                """, (payment_id, payment_id))
-            conn.commit()
-            conn.close()
-            return jsonify({'success': True})
-        
-        conn.close()
-        return jsonify({'error': 'Payment not found or already processed'}), 400
-        
+            SELECT
+                payment_id,
+                user_id,
+                telegram_id,
+                ticket_id,
+                ticket_number,
+                extracted_amount,
+                status
+            FROM payments
+            WHERE payment_id = %s
+            FOR UPDATE
+        """, (payment_id,))
+
+        payment = cursor.fetchone()
+
+        if not payment:
+            conn.rollback()
+
+            return jsonify({
+                'success': False,
+                'error': 'Payment not found'
+            }), 404
+
+        (
+            db_payment_id,
+            user_id,
+            telegram_id,
+            ticket_id,
+            ticket_number,
+            amount,
+            current_status
+        ) = payment
+
+        if current_status != 'pending':
+            conn.rollback()
+
+            return jsonify({
+                'success': False,
+                'error': f'Payment is already {current_status}'
+            }), 409
+
+        # -------------------------------------------------
+        # APPROVE
+        # -------------------------------------------------
+        if status == 'approved':
+
+            cursor.execute("""
+                SELECT status
+                FROM tickets
+                WHERE ticket_id = %s
+                FOR UPDATE
+            """, (ticket_id,))
+
+            ticket = cursor.fetchone()
+
+            if not ticket:
+                conn.rollback()
+
+                return jsonify({
+                    'success': False,
+                    'error': 'Ticket not found'
+                }), 404
+
+            if ticket[0] != 'pending':
+                conn.rollback()
+
+                return jsonify({
+                    'success': False,
+                    'error': f'Ticket #{ticket_number} is not pending'
+                }), 409
+
+            # Ticket -> sold
+            cursor.execute("""
+                UPDATE tickets
+                SET
+                    status = 'sold',
+                    assigned_at = CURRENT_TIMESTAMP
+                WHERE ticket_id = %s
+                  AND status = 'pending'
+            """, (ticket_id,))
+
+            if cursor.rowcount != 1:
+                conn.rollback()
+
+                return jsonify({
+                    'success': False,
+                    'error': 'Could not finalize ticket'
+                }), 409
+
+            # Payment -> approved
+            cursor.execute("""
+                UPDATE payments
+                SET
+                    status = 'approved',
+                    verified_by = %s,
+                    verified_at = CURRENT_TIMESTAMP,
+                    admin_notes = %s
+                WHERE payment_id = %s
+                  AND status = 'pending'
+            """, (
+                admin_id,
+                notes,
+                payment_id
+            ))
+
+            # Update user's balance/spending
+            cursor.execute("""
+                UPDATE users
+                SET
+                    balance = COALESCE(balance, 0) + %s,
+                    total_spent = COALESCE(total_spent, 0) + %s
+                WHERE user_id = %s
+            """, (
+                amount,
+                amount,
+                user_id
+            ))
+
+        # -------------------------------------------------
+        # REJECT
+        # -------------------------------------------------
+        else:
+
+            cursor.execute("""
+                UPDATE tickets
+                SET
+                    status = 'available',
+                    user_id = NULL,
+                    telegram_id = NULL,
+                    phone_number = NULL,
+                    assigned_at = NULL
+                WHERE ticket_id = %s
+                  AND status = 'pending'
+            """, (ticket_id,))
+
+            cursor.execute("""
+                UPDATE payments
+                SET
+                    status = 'rejected',
+                    verified_by = %s,
+                    verified_at = CURRENT_TIMESTAMP,
+                    admin_notes = %s
+                WHERE payment_id = %s
+                  AND status = 'pending'
+            """, (
+                admin_id,
+                notes,
+                payment_id
+            ))
+
+        conn.commit()
+
+        return jsonify({
+            'success': True,
+            'payment_id': payment_id,
+            'ticket_number': ticket_number,
+            'status': status,
+            'message': f'Payment #{payment_id} {status}.'
+        })
+
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+
+        if conn:
+            conn.rollback()
+
+        print(f"ERROR /api/payments/verify: {e}")
+
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+    finally:
+        if conn:
+            conn.close()
 
 # =====================================================
 # OTHER API ROUTES
