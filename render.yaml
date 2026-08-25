@@ -11,7 +11,7 @@ services:
     envVars:
       # ====== REQUIRED ======
       - key: BOT_TOKEN
-        value: 8638438550:AAHR1TdyMjAhpRNq4ll0QMds6JZMVPZWock
+        value: 8652237199:AAGF2EesFE36MU3DxVELpb9TmLKaUJA1yHY
       - key: ADMIN_IDS
         value: 699428281
       
