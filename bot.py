@@ -159,48 +159,32 @@ async def generate_tickets():
             
             if count and count > 0:
                 logger.info(f"✅ {count} tickets already exist")
-                
-                # Check available tickets
                 available = await conn.fetchval("SELECT COUNT(*) FROM tickets WHERE status = 'available'")
                 logger.info(f"🎫 Available tickets: {available}")
-                
-                # If no available tickets but total exists, reset some
-                if available == 0 and count > 0:
-                    logger.info("🔄 No available tickets! Resetting some tickets...")
-                    await conn.execute("""
-                        UPDATE tickets 
-                        SET status = 'available', user_id = NULL, telegram_id = NULL, phone_number = NULL, assigned_at = NULL 
-                        WHERE status = 'pending' OR status = 'sold'
-                        LIMIT 1000
-                    """)
-                    logger.info("✅ Reset 1000 tickets to available")
                 return
             
             logger.info("🎫 Generating 20000 tickets...")
             
-            # Generate tickets in batches
+            # Generate in batches with type_id
             batch_size = 1000
             for start in range(1, 20001, batch_size):
                 end = min(start + batch_size - 1, 20000)
                 
-                # Build batch insert
+                # Build batch insert with type_id
                 values = []
                 for i in range(start, end + 1):
-                    values.append(f"({i}, 'available')")
+                    values.append(f"({i}, 1, 'available')")
                 
-                query = f"INSERT INTO tickets (ticket_number, status) VALUES {','.join(values)}"
+                query = f"INSERT INTO tickets (ticket_number, type_id, status) VALUES {','.join(values)}"
                 await conn.execute(query)
                 logger.info(f"✅ Generated tickets {start}-{end}")
             
-            # Verify generation
-            final_count = await conn.fetchval("SELECT COUNT(*) FROM tickets")
-            logger.info(f"✅ All {final_count} tickets generated successfully!")
+            logger.info("✅ All 20000 tickets generated successfully!")
             
     except Exception as e:
         logger.error(f"❌ Error generating tickets: {e}")
         import traceback
         traceback.print_exc()
-
 # =====================================================
 # LANGUAGE CACHE
 # =====================================================
