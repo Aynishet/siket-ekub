@@ -287,7 +287,21 @@ async def generate_tickets():
 # =====================================================
 TEXTS = {
     "en": {
+        # ===== REGISTRATION =====
         "welcome": "🎰 Welcome to Siket Ekub!",
+        "choose_interface": "🎰 Choose how to play:",
+        "use_telegram": "🤖 Use Telegram",
+        "open_web": "🌐 Open Web",
+        "about": "ℹ️ About",
+        "registration_required": "❌ Please /start first to register.",
+        "reg_name": "📝 Enter your full name:",
+        "reg_phone": "📱 Share your phone number:",
+        "reg_address": "📍 Enter your address:",
+        "registered": "✅ Registration complete!",
+        "choose_lang": "🌍 Choose language:",
+        "lang_changed": "✅ Language changed!",
+        
+        # ===== MAIN MENU =====
         "menu": "📋 Main Menu",
         "buy": "🎯 Buy Ticket",
         "tickets": "🎫 My Tickets",
@@ -295,24 +309,37 @@ TEXTS = {
         "balance": "💰 Balance",
         "support": "💬 Support",
         "lang": "🌍 Language",
-        "reg_phone": "📱 Share your phone number:",
-        "reg_address": "📍 Enter your address:",
-        "reg_name": "📝 Enter your full name:",
-        "registered": "✅ Registration complete!",
+        "back": "🔙 Back",
+        "back_user": "🔙 Back to User",
+        
+        # ===== BUY TICKET =====
         "pick_ticket": "🎫 Choose how to pick your ticket:",
         "random_pick": "🎲 Random Ticket",
         "type_number": "✏️ Type Number",
         "choose_block": "📦 Choose Block (50 tickets)",
-        "back": "🔙 Back",
+        "select_block": "📦 Select a block (50 tickets each):",
+        "enter_number": "✏️ Enter ticket number (1-20000):",
+        "invalid_number": "❌ Invalid number. Please enter 1-20000.",
+        "ticket_not_found": "❌ Ticket not found or already taken.",
+        "ticket_taken": "❌ Ticket already taken.",
+        "no_tickets": "📭 No tickets available.",
+        "no_tickets_owned": "📭 You have no tickets yet.",
+        
+        # ===== PAYMENT =====
         "pay": "💰 Pay 3,000 ETB to:\nCBE: 1000786684491\nAbyssinia: 264517826\nTelebirr: 0979774444\n\n📸 Send payment screenshot:",
         "pay_submitted": "✅ Payment submitted! Waiting for admin verification.",
         "pay_approved": "✅ Ticket #{ticket} approved!",
         "pay_rejected": "❌ Payment rejected.",
-        "no_tickets": "📭 No tickets available.",
-        "no_tickets_owned": "📭 You have no tickets yet.",
-        "prize_list": "🏆 10 PRIZES:\n1st: BWD Leopard 3 (8,000,000 ETB)\n2nd: Hyundai Bayon (5,000,000 ETB)\n3rd: Shop Space (4,000,000 ETB)\n4th-7th: 1,000,000 ETB each\n8th: 500,000 ETB\n9th: 300,000 ETB\n10th: 200,000 ETB",
+        
+        # ===== USER INFO =====
         "balance_info": "💰 Balance: {balance} ETB\n🎫 Tickets: {tickets}\n💸 Total Spent: {spent} ETB",
+        "your_tickets": "🎫 Your Tickets ({count}):\n",
+        "support_info": "💬 Support Channel: {channel}",
+        "prize_list": "🏆 10 PRIZES:\n1st: BWD Leopard 3 (8,000,000 ETB)\n2nd: Hyundai Bayon (5,000,000 ETB)\n3rd: Shop Space (4,000,000 ETB)\n4th-7th: 1,000,000 ETB each\n8th: 500,000 ETB\n9th: 300,000 ETB\n10th: 200,000 ETB",
+        
+        # ===== ADMIN =====
         "admin": "🛠️ Admin",
+        "admin_panel": "🛠️ Admin Panel - Choose an option:",
         "verify": "✅ Verify Payments",
         "users": "👤 Users",
         "refund": "🔄 Refund",
@@ -320,38 +347,39 @@ TEXTS = {
         "reports": "📊 Reports",
         "buy_for_user": "🎯 Buy for User",
         "manual_ticket": "📝 Manual Ticket",
-        "choose_lang": "🌍 Choose language:",
-        "lang_changed": "✅ Language changed!",
+        "no_users": "📭 No users found.",
+        "no_refund": "✅ No users with balance.",
         "refund_complete": "✅ Refunded {amount} ETB.",
         "refund_all": "✅ Refunded {total} ETB to {count} users.",
-        "no_refund": "✅ No users with balance.",
         "broadcast_sent": "✅ Sent to {sent}/{total} users.",
-        "support_info": "💬 Support Channel: {channel}",
-        "your_tickets": "🎫 Your Tickets ({count}):\n",
-        "choose_interface": "🎰 Choose how to play:",
-        "use_telegram": "🤖 Use Telegram",
-        "open_web": "🌐 Open Web",
-        "about": "ℹ️ About",
-        "sold": "SOLD",
-        "select_block": "📦 Select a block (50 tickets each):",
-        "enter_number": "✏️ Enter ticket number (1-20000):",
-        "invalid_number": "❌ Invalid number. Please enter 1-20000.",
-        "ticket_not_found": "❌ Ticket not found or already taken.",
-        "ticket_taken": "❌ Ticket already taken.",
-        "admin_panel": "🛠️ Admin Panel",
-        "back_user": "🔙 Back to User",
-        "no_users": "📭 No users found.",
-        "registration_required": "❌ Please /start first to register.",
         "user_not_found": "❌ User not found!",
-        "user_already_registered": "✅ User already registered!",
         "user_added": "✅ User added successfully!",
         "enter_user_id": "📝 Enter user Telegram ID:",
         "enter_ticket_number": "📝 Enter ticket number (or 'random'):",
         "ticket_assigned": "✅ Ticket #{ticket} assigned to user!",
         "ticket_already_sold": "❌ Ticket already sold!",
+        "add_user": "➕ Add User",
+        "delete_user": "🗑️ Delete User",
+        "enter_phone": "📝 Enter phone number:",
+        "enter_address": "📝 Enter address:",
+        "user_deleted": "✅ User deleted successfully!",
     },
     "am": {
+        # ===== REGISTRATION =====
         "welcome": "🎰 እንኳን ወደ ስኬት እቁብ በደህና መጡ!",
+        "choose_interface": "🎰 እንዴት መጫወት ይፈልጋሉ?",
+        "use_telegram": "🤖 በቴሌግራም",
+        "open_web": "🌐 በድረ-ገጽ",
+        "about": "ℹ️ መረጃ",
+        "registration_required": "❌ እባክዎ ለመመዝገብ /start ይጫኑ።",
+        "reg_name": "📝 ሙሉ ስምዎን ያስገቡ:",
+        "reg_phone": "📱 ስልክ ቁጥርዎን ያጋሩ:",
+        "reg_address": "📍 አድራሻዎን ያስገቡ:",
+        "registered": "✅ ምዝገባ ተጠናቋል!",
+        "choose_lang": "🌍 ቋንቋ ይምረጡ:",
+        "lang_changed": "✅ ቋንቋ ተቀይሯል!",
+        
+        # ===== MAIN MENU =====
         "menu": "📋 ዋና ምናሌ",
         "buy": "🎯 ቲኬት ግዛ",
         "tickets": "🎫 ቲኬቶቼ",
@@ -359,24 +387,37 @@ TEXTS = {
         "balance": "💰 ቀሪ",
         "support": "💬 ድጋፍ",
         "lang": "🌍 ቋንቋ",
-        "reg_phone": "📱 ስልክ ቁጥርዎን ያጋሩ:",
-        "reg_address": "📍 አድራሻዎን ያስገቡ:",
-        "reg_name": "📝 ሙሉ ስምዎን ያስገቡ:",
-        "registered": "✅ ምዝገባ ተጠናቋል!",
+        "back": "🔙 ወደ ኋላ",
+        "back_user": "🔙 ወደ ተጠቃሚ",
+        
+        # ===== BUY TICKET =====
         "pick_ticket": "🎫 ቲኬት ለመምረጥ ይምረጡ:",
         "random_pick": "🎲 በዘፈቀደ",
         "type_number": "✏️ ቁጥር ይጻፉ",
         "choose_block": "📦 ብሎክ ምረጥ (50 ቲኬቶች)",
-        "back": "🔙 ወደ ኋላ",
+        "select_block": "📦 ብሎክ ምረጥ (50 ቲኬቶች):",
+        "enter_number": "✏️ ቲኬት ቁጥር ያስገቡ (1-20000):",
+        "invalid_number": "❌ ልክ ያልሆነ ቁጥር። እባክዎ 1-20000 ያስገቡ።",
+        "ticket_not_found": "❌ ቲኬቱ አልተገኘም ወይም ተወስዷል።",
+        "ticket_taken": "❌ ቲኬቱ ተወስዷል።",
+        "no_tickets": "📭 ምንም ቲኬት የለም።",
+        "no_tickets_owned": "📭 እስካሁን ምንም ቲኬት የለዎትም።",
+        
+        # ===== PAYMENT =====
         "pay": "💰 3,000 ብር ክፈሉ:\nCBE: 1000786684491\nአቢሲኒያ: 264517826\nተሌብር: 0979774444\n\n📸 የክፍያ ስክሪንሾት ይላኩ:",
         "pay_submitted": "✅ ክፍያ ተልኳል! አስተዳዳሪ እየጠበቀ ነው።",
         "pay_approved": "✅ ቲኬት #{ticket} ጸድቋል!",
         "pay_rejected": "❌ ክፍያ ውድቅ ተደርጓል።",
-        "no_tickets": "📭 ምንም ቲኬት የለም።",
-        "no_tickets_owned": "📭 እስካሁን ምንም ቲኬት የለዎትም።",
-        "prize_list": "🏆 10 ሽልማቶች:\n1ኛ: BWD Leopard 3 (8,000,000 ብር)\n2ኛ: Hyundai Bayon (5,000,000 ብር)\n3ኛ: የሱቅ ቦታ (4,000,000 ብር)\n4ኛ-7ኛ: 1,000,000 ብር\n8ኛ: 500,000 ብር\n9ኛ: 300,000 ብር\n10ኛ: 200,000 ብር",
+        
+        # ===== USER INFO =====
         "balance_info": "💰 ቀሪ: {balance} ብር\n🎫 ቲኬቶች: {tickets}\n💸 አጠቃላይ: {spent} ብር",
+        "your_tickets": "🎫 ቲኬቶችዎ ({count}):\n",
+        "support_info": "💬 የድጋፍ ቻናል: {channel}",
+        "prize_list": "🏆 10 ሽልማቶች:\n1ኛ: BWD Leopard 3 (8,000,000 ብር)\n2ኛ: Hyundai Bayon (5,000,000 ብር)\n3ኛ: የሱቅ ቦታ (4,000,000 ብር)\n4ኛ-7ኛ: 1,000,000 ብር\n8ኛ: 500,000 ብር\n9ኛ: 300,000 ብር\n10ኛ: 200,000 ብር",
+        
+        # ===== ADMIN =====
         "admin": "🛠️ አስተዳዳሪ",
+        "admin_panel": "🛠️ የአስተዳዳሪ ፓነል - አማራጭ ይምረጡ:",
         "verify": "✅ ክፍያዎችን አረጋግጥ",
         "users": "👤 ተጠቃሚዎች",
         "refund": "🔄 መመለስ",
@@ -384,38 +425,24 @@ TEXTS = {
         "reports": "📊 ሪፖርቶች",
         "buy_for_user": "🎯 ለሌላ ግዛ",
         "manual_ticket": "📝 በእጅ አስገባ",
-        "choose_lang": "🌍 ቋንቋ ምረጥ:",
-        "lang_changed": "✅ ቋንቋ ተቀይሯል!",
+        "no_users": "📭 ምንም ተጠቃሚ የለም።",
+        "no_refund": "✅ ቀሪ ያላቸው ተጠቃሚዎች የሉም።",
         "refund_complete": "✅ {amount} ብር ተመልሷል።",
         "refund_all": "✅ {total} ብር ለ {count} ተጠቃሚዎች ተመልሷል።",
-        "no_refund": "✅ ቀሪ ያላቸው ተጠቃሚዎች የሉም።",
         "broadcast_sent": "✅ ለ {sent}/{total} ተልኳል።",
-        "support_info": "💬 የድጋፍ ቻናል: {channel}",
-        "your_tickets": "🎫 ቲኬቶችዎ ({count}):\n",
-        "choose_interface": "🎰 እንዴት መጫወት ይፈልጋሉ?",
-        "use_telegram": "🤖 በቴሌግራም",
-        "open_web": "🌐 በድረ-ገጽ",
-        "about": "ℹ️ መረጃ",
-        "sold": "ተሽጧል",
-        "select_block": "📦 ብሎክ ምረጥ (50 ቲኬቶች):",
-        "enter_number": "✏️ ቲኬት ቁጥር ያስገቡ (1-20000):",
-        "invalid_number": "❌ ልክ ያልሆነ ቁጥር። እባክዎ 1-20000 ያስገቡ።",
-        "ticket_not_found": "❌ ቲኬቱ አልተገኘም ወይም ተወስዷል።",
-        "ticket_taken": "❌ ቲኬቱ ተወስዷል።",
-        "admin_panel": "🛠️ የአስተዳዳሪ ፓነል",
-        "back_user": "🔙 ወደ ተጠቃሚ",
-        "no_users": "📭 ምንም ተጠቃሚ የለም።",
-        "registration_required": "❌ እባክዎ ለመመዝገብ /start ይጫኑ።",
         "user_not_found": "❌ ተጠቃሚ አልተገኘም!",
-        "user_already_registered": "✅ ተጠቃሚው ቀድሞውኑ ተመዝግቧል!",
         "user_added": "✅ ተጠቃሚ ተጨምሯል!",
         "enter_user_id": "📝 የተጠቃሚውን ቴሌግራም መታወቂያ ያስገቡ:",
         "enter_ticket_number": "📝 የቲኬት ቁጥር ያስገቡ (ወይም 'random'):",
         "ticket_assigned": "✅ ቲኬት #{ticket} ለተጠቃሚ ተመድቧል!",
         "ticket_already_sold": "❌ ቲኬቱ ቀድሞውኑ ተሽጧል!",
+        "add_user": "➕ ተጠቃሚ ጨምር",
+        "delete_user": "🗑️ ተጠቃሚ ሰርዝ",
+        "enter_phone": "📝 ስልክ ቁጥር ያስገቡ:",
+        "enter_address": "📝 አድራሻ ያስገቡ:",
+        "user_deleted": "✅ ተጠቃሚ ተሰርዟል!",
     }
 }
-
 # =====================================================
 # LANGUAGE CACHE
 # =====================================================
@@ -723,7 +750,6 @@ async def about(message: Message):
 # =====================================================
 # LANGUAGE TOGGLE
 # =====================================================
-
 @router.message(F.text == "🌍 Language")
 async def lang_toggle(message: Message):
     uid = message.from_user.id
@@ -742,10 +768,15 @@ async def lang_toggle(message: Message):
 async def toggle_lang(callback: CallbackQuery):
     uid = callback.from_user.id
     lang = callback.data.split("_")[2]
+    
     await DatabaseHelper.execute("UPDATE users SET language = $1 WHERE telegram_id = $2", lang, uid)
     LangCache.set(uid, lang)
+    
     await callback.message.delete()
-    await callback.message.answer(get_text(uid, "lang_changed"), reply_markup=user_menu(uid))
+    await callback.message.answer(
+        get_text(uid, "lang_changed"),
+        reply_markup=user_menu(uid)
+    )
     await callback.answer()
 
 # =====================================================
