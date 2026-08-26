@@ -2,7 +2,7 @@
 # BOT.PY - SIKET EKUB COMPLETE - FULLY FIXED
 # =====================================================
 
-import asyncio  # ← FIX: Added this import
+import asyncio
 import sys
 import os
 import logging
@@ -283,7 +283,7 @@ async def generate_tickets():
         logger.error(f"❌ Error generating tickets: {e}")
 
 # =====================================================
-# LANGUAGE TEXTS
+# LANGUAGE TEXTS - COMPLETE
 # =====================================================
 TEXTS = {
     "en": {
@@ -482,6 +482,7 @@ TEXTS = {
         "user_deleted": "✅ ተጠቃሚው በተሳካ ሁኔታ ተሰርዟል!",
     }
 }
+
 # =====================================================
 # LANGUAGE CACHE
 # =====================================================
@@ -505,7 +506,7 @@ def get_text(user_id: int, key: str, **kwargs) -> str:
     return text.format(**kwargs) if kwargs else text
 
 # =====================================================
-# KEYBOARDS
+# KEYBOARDS - FIXED WITH LANGUAGE
 # =====================================================
 
 def choice_menu(uid: int) -> ReplyKeyboardMarkup:
@@ -668,7 +669,7 @@ async def start_cmd(message: Message, state: FSMContext):
         LangCache.set(uid, lang)
         await message.answer(
             f"{get_text(uid, 'welcome')}\n\n{get_text(uid, 'choose_interface')}",
-            reply_markup=choice_menu(),
+            reply_markup=choice_menu(uid),
             parse_mode="Markdown"
         )
         return
@@ -737,7 +738,7 @@ async def reg_address(message: Message, state: FSMContext):
     await state.clear()
     await message.answer(
         f"✅ {get_text(uid, 'registered')}\n\n{get_text(uid, 'choose_interface')}",
-        reply_markup=choice_menu(),
+        reply_markup=choice_menu(uid),
         parse_mode="Markdown"
     )
 
@@ -790,23 +791,13 @@ async def open_web(message: Message):
 async def about(message: Message):
     uid = message.from_user.id
     await message.answer(
-        "🎰 **Siket Ekub**\n\n"
-        "💰 Price: 3,000 ETB\n\n"
-        "🏆 **10 PRIZES:**\n"
-        "1st: BWD Leopard 3 (8,000,000 ETB)\n"
-        "2nd: Hyundai Bayon (5,000,000 ETB)\n"
-        "3rd: Shop Space (4,000,000 ETB)\n"
-        "4th: 1,000,000 ETB\n"
-        "5th: 1,000,000 ETB\n"
-        "6th: 1,000,000 ETB\n"
-        "7th: 1,000,000 ETB\n"
-        "8th: 500,000 ETB\n"
-        "9th: 300,000 ETB\n"
-        "10th: 200,000 ETB\n\n"
+        f"🎰 **Siket Ekub**\n\n"
+        f"💰 Price: 3,000 ETB\n\n"
+        f"{get_text(uid, 'prize_list')}\n\n"
         f"📞 Support: {SUPPORT_CHANNEL_LINK}\n"
         f"🎟️ Tickets: {TICKET_CHANNEL_LINK}\n\n"
-        "📌 Register > Pick Ticket > Pay > Win!",
-        reply_markup=choice_menu(),
+        f"📌 Register > Pick Ticket > Pay > Win!",
+        reply_markup=choice_menu(uid),
         parse_mode="Markdown"
     )
 
@@ -1267,7 +1258,7 @@ async def admin_cmd(message: Message):
     if uid not in ADMIN_IDS:
         await message.answer("⛔ Unauthorized!", reply_markup=user_menu(uid))
         return
-    await message.answer("🛠️ Admin Panel - Choose an option:", reply_markup=admin_menu(uid))
+    await message.answer(get_text(uid, "admin_panel"), reply_markup=admin_menu(uid))
 
 @router.message(F.text == "✅ Verify Payments")
 async def admin_verify(message: Message):
