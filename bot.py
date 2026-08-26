@@ -289,18 +289,18 @@ TEXTS = {
     "en": {
         # ===== REGISTRATION =====
         "welcome": "🎰 Welcome to Siket Ekub!",
-        "choose_interface": "🎰 Choose how to play:",
+        "choose_interface": "🎰 Choose how you would like to use Siket Ekub:",
         "use_telegram": "🤖 Use Telegram",
         "open_web": "🌐 Open Web",
         "about": "ℹ️ About",
-        "registration_required": "❌ Please /start first to register.",
-        "reg_name": "📝 Enter your full name:",
-        "reg_phone": "📱 Share your phone number:",
-        "reg_address": "📍 Enter your address:",
-        "registered": "✅ Registration complete!",
-        "choose_lang": "🌍 Choose language:",
-        "lang_changed": "✅ Language changed!",
-        
+        "registration_required": "❌ Please use /start first to register.",
+        "reg_name": "📝 Please enter your full name:",
+        "reg_phone": "📱 Please share your phone number:",
+        "reg_address": "📍 Please enter your address:",
+        "registered": "✅ Registration completed successfully!",
+        "choose_lang": "🌍 Please choose your language:",
+        "lang_changed": "✅ Language changed successfully!",
+
         # ===== MAIN MENU =====
         "menu": "📋 Main Menu",
         "buy": "🎯 Buy Ticket",
@@ -311,35 +311,54 @@ TEXTS = {
         "lang": "🌍 Language",
         "back": "🔙 Back",
         "back_user": "🔙 Back to User",
-        
+
         # ===== BUY TICKET =====
-        "pick_ticket": "🎫 Choose how to pick your ticket:",
+        "pick_ticket": "🎫 Choose how you would like to select your ticket:",
         "random_pick": "🎲 Random Ticket",
-        "type_number": "✏️ Type Number",
-        "choose_block": "📦 Choose Block (50 tickets)",
-        "select_block": "📦 Select a block (50 tickets each):",
-        "enter_number": "✏️ Enter ticket number (1-20000):",
-        "invalid_number": "❌ Invalid number. Please enter 1-20000.",
-        "ticket_not_found": "❌ Ticket not found or already taken.",
-        "ticket_taken": "❌ Ticket already taken.",
-        "no_tickets": "📭 No tickets available.",
-        "no_tickets_owned": "📭 You have no tickets yet.",
-        
+        "type_number": "✏️ Enter Ticket Number",
+        "choose_block": "📦 Choose Block (50 Tickets)",
+        "select_block": "📦 Select a ticket block (50 tickets per block):",
+        "enter_number": "✏️ Enter the ticket number (1–20,000):",
+        "invalid_number": "❌ Invalid ticket number. Please enter a number from 1 to 20,000.",
+        "ticket_not_found": "❌ Ticket not found or it has already been taken.",
+        "ticket_taken": "❌ This ticket has already been taken.",
+        "no_tickets": "📭 No tickets are currently available.",
+        "no_tickets_owned": "📭 You do not have any tickets yet.",
+
         # ===== PAYMENT =====
-        "pay": "💰 Pay 3,000 ETB to:\nCBE: 1000786684491\nAbyssinia: 264517826\nTelebirr: 0979774444\n\n📸 Send payment screenshot:",
-        "pay_submitted": "✅ Payment submitted! Waiting for admin verification.",
-        "pay_approved": "✅ Ticket #{ticket} approved!",
-        "pay_rejected": "❌ Payment rejected.",
-        
+        "pay": (
+            "💰 Please pay 3,000 ETB to one of the following accounts:\n"
+            "CBE: 1000786684491\n"
+            "Abyssinia Bank: 264517826\n"
+            "Telebirr: 0979774444\n\n"
+            "📸 After payment, please send a screenshot of your payment receipt."
+        ),
+        "pay_submitted": "✅ Your payment has been submitted successfully. Please wait for admin verification.",
+        "pay_approved": "✅ Your ticket #{ticket} has been approved successfully!",
+        "pay_rejected": "❌ Your payment has been rejected.",
+
         # ===== USER INFO =====
-        "balance_info": "💰 Balance: {balance} ETB\n🎫 Tickets: {tickets}\n💸 Total Spent: {spent} ETB",
+        "balance_info": (
+            "💰 Balance: {balance} ETB\n"
+            "🎫 Tickets: {tickets}\n"
+            "💸 Total Spent: {spent} ETB"
+        ),
         "your_tickets": "🎫 Your Tickets ({count}):\n",
         "support_info": "💬 Support Channel: {channel}",
-        "prize_list": "🏆 10 PRIZES:\n1st: BWD Leopard 3 (8,000,000 ETB)\n2nd: Hyundai Bayon (5,000,000 ETB)\n3rd: Shop Space (4,000,000 ETB)\n4th-7th: 1,000,000 ETB each\n8th: 500,000 ETB\n9th: 300,000 ETB\n10th: 200,000 ETB",
-        
+        "prize_list": (
+            "🏆 10 PRIZES:\n"
+            "1st: BWD Leopard 3 (8,000,000 ETB)\n"
+            "2nd: Hyundai Bayon (5,000,000 ETB)\n"
+            "3rd: Shop Space (4,000,000 ETB)\n"
+            "4th–7th: 1,000,000 ETB each\n"
+            "8th: 500,000 ETB\n"
+            "9th: 300,000 ETB\n"
+            "10th: 200,000 ETB"
+        ),
+
         # ===== ADMIN =====
         "admin": "🛠️ Admin",
-        "admin_panel": "🛠️ Admin Panel - Choose an option:",
+        "admin_panel": "🛠️ Admin Panel – Choose an option:",
         "verify": "✅ Verify Payments",
         "users": "👤 Users",
         "refund": "🔄 Refund",
@@ -348,99 +367,119 @@ TEXTS = {
         "buy_for_user": "🎯 Buy for User",
         "manual_ticket": "📝 Manual Ticket",
         "no_users": "📭 No users found.",
-        "no_refund": "✅ No users with balance.",
-        "refund_complete": "✅ Refunded {amount} ETB.",
-        "refund_all": "✅ Refunded {total} ETB to {count} users.",
-        "broadcast_sent": "✅ Sent to {sent}/{total} users.",
+        "no_refund": "✅ No users currently have a balance to refund.",
+        "refund_complete": "✅ {amount} ETB has been refunded.",
+        "refund_all": "✅ A total of {total} ETB has been refunded to {count} users.",
+        "broadcast_sent": "✅ Message sent to {sent} out of {total} users.",
         "user_not_found": "❌ User not found!",
         "user_added": "✅ User added successfully!",
-        "enter_user_id": "📝 Enter user Telegram ID:",
-        "enter_ticket_number": "📝 Enter ticket number (or 'random'):",
-        "ticket_assigned": "✅ Ticket #{ticket} assigned to user!",
-        "ticket_already_sold": "❌ Ticket already sold!",
+        "enter_user_id": "📝 Enter the user's Telegram ID:",
+        "enter_ticket_number": "📝 Enter the ticket number or type 'random':",
+        "ticket_assigned": "✅ Ticket #{ticket} has been assigned to the user!",
+        "ticket_already_sold": "❌ This ticket has already been sold!",
         "add_user": "➕ Add User",
         "delete_user": "🗑️ Delete User",
         "enter_phone": "📝 Enter phone number:",
         "enter_address": "📝 Enter address:",
         "user_deleted": "✅ User deleted successfully!",
     },
+
     "am": {
         # ===== REGISTRATION =====
         "welcome": "🎰 እንኳን ወደ ስኬት እቁብ በደህና መጡ!",
-        "choose_interface": "🎰 እንዴት መጫወት ይፈልጋሉ?",
-        "use_telegram": "🤖 በቴሌግራም",
-        "open_web": "🌐 በድረ-ገጽ",
-        "about": "ℹ️ መረጃ",
-        "registration_required": "❌ እባክዎ ለመመዝገብ /start ይጫኑ።",
-        "reg_name": "📝 ሙሉ ስምዎን ያስገቡ:",
-        "reg_phone": "📱 ስልክ ቁጥርዎን ያጋሩ:",
-        "reg_address": "📍 አድራሻዎን ያስገቡ:",
-        "registered": "✅ ምዝገባ ተጠናቋል!",
-        "choose_lang": "🌍 ቋንቋ ይምረጡ:",
-        "lang_changed": "✅ ቋንቋ ተቀይሯል!",
-        
+        "choose_interface": "🎰 ስኬት እቁብን እንዴት መጠቀም ይፈልጋሉ?",
+        "use_telegram": "🤖 በቴሌግራም ይጠቀሙ",
+        "open_web": "🌐 የድር ገጽ ይክፈቱ",
+        "about": "ℹ️ ስለ ስኬት እቁብ",
+        "registration_required": "❌ እባክዎ መጀመሪያ /start በመጠቀም ይመዝገቡ።",
+        "reg_name": "📝 ሙሉ ስምዎን ያስገቡ፦",
+        "reg_phone": "📱 እባክዎ ስልክ ቁጥርዎን ያጋሩ፦",
+        "reg_address": "📍 አድራሻዎን ያስገቡ፦",
+        "registered": "✅ ምዝገባዎ በተሳካ ሁኔታ ተጠናቋል!",
+        "choose_lang": "🌍 እባክዎ ቋንቋ ይምረጡ፦",
+        "lang_changed": "✅ ቋንቋው በተሳካ ሁኔታ ተቀይሯል!",
+
         # ===== MAIN MENU =====
         "menu": "📋 ዋና ምናሌ",
-        "buy": "🎯 ቲኬት ግዛ",
+        "buy": "🎯 ቲኬት ይግዙ",
         "tickets": "🎫 ቲኬቶቼ",
         "prizes": "🏆 ሽልማቶች",
-        "balance": "💰 ቀሪ",
+        "balance": "💰 ቀሪ ሂሳብ",
         "support": "💬 ድጋፍ",
         "lang": "🌍 ቋንቋ",
         "back": "🔙 ወደ ኋላ",
-        "back_user": "🔙 ወደ ተጠቃሚ",
-        
+        "back_user": "🔙 ወደ ተጠቃሚ ምናሌ",
+
         # ===== BUY TICKET =====
-        "pick_ticket": "🎫 ቲኬት ለመምረጥ ይምረጡ:",
-        "random_pick": "🎲 በዘፈቀደ",
-        "type_number": "✏️ ቁጥር ይጻፉ",
-        "choose_block": "📦 ብሎክ ምረጥ (50 ቲኬቶች)",
-        "select_block": "📦 ብሎክ ምረጥ (50 ቲኬቶች):",
-        "enter_number": "✏️ ቲኬት ቁጥር ያስገቡ (1-20000):",
-        "invalid_number": "❌ ልክ ያልሆነ ቁጥር። እባክዎ 1-20000 ያስገቡ።",
-        "ticket_not_found": "❌ ቲኬቱ አልተገኘም ወይም ተወስዷል።",
-        "ticket_taken": "❌ ቲኬቱ ተወስዷል።",
-        "no_tickets": "📭 ምንም ቲኬት የለም።",
+        "pick_ticket": "🎫 ቲኬትዎን እንዴት መምረጥ እንደሚፈልጉ ይምረጡ፦",
+        "random_pick": "🎲 በዘፈቀደ ቲኬት ይምረጡ",
+        "type_number": "✏️ የቲኬት ቁጥር ያስገቡ",
+        "choose_block": "📦 ብሎክ ይምረጡ (50 ቲኬቶች)",
+        "select_block": "📦 የቲኬት ብሎክ ይምረጡ (በእያንዳንዱ ብሎክ 50 ቲኬቶች)፦",
+        "enter_number": "✏️ የቲኬት ቁጥር ያስገቡ (1–20,000)፦",
+        "invalid_number": "❌ ትክክለኛ ያልሆነ የቲኬት ቁጥር። እባክዎ ከ1 እስከ 20,000 ያለ ቁጥር ያስገቡ።",
+        "ticket_not_found": "❌ ቲኬቱ አልተገኘም ወይም ቀድሞ ተወስዷል።",
+        "ticket_taken": "❌ ይህ ቲኬት ቀድሞ ተወስዷል።",
+        "no_tickets": "📭 በአሁኑ ጊዜ ምንም ቲኬት አይገኝም።",
         "no_tickets_owned": "📭 እስካሁን ምንም ቲኬት የለዎትም።",
-        
+
         # ===== PAYMENT =====
-        "pay": "💰 3,000 ብር ክፈሉ:\nCBE: 1000786684491\nአቢሲኒያ: 264517826\nተሌብር: 0979774444\n\n📸 የክፍያ ስክሪንሾት ይላኩ:",
-        "pay_submitted": "✅ ክፍያ ተልኳል! አስተዳዳሪ እየጠበቀ ነው።",
-        "pay_approved": "✅ ቲኬት #{ticket} ጸድቋል!",
-        "pay_rejected": "❌ ክፍያ ውድቅ ተደርጓል።",
-        
+        "pay": (
+            "💰 እባክዎ 3,000 ብር ከሚከተሉት የክፍያ አማራጮች በአንዱ ይክፈሉ፦\n"
+            "CBE፦ 1000786684491\n"
+            "አቢሲኒያ ባንክ፦ 264517826\n"
+            "ቴሌብር፦ 0979774444\n\n"
+            "📸 ክፍያውን ከፈጸሙ በኋላ የክፍያ ደረሰኝ ስክሪንሾት ይላኩ።"
+        ),
+        "pay_submitted": "✅ የክፍያ መረጃዎ ተልኳል። እባክዎ አስተዳዳሪው እስኪያረጋግጥ ይጠብቁ።",
+        "pay_approved": "✅ ቲኬት ቁጥር #{ticket} በተሳካ ሁኔታ ጸድቋል!",
+        "pay_rejected": "❌ ክፍያዎ ውድቅ ተደርጓል።",
+
         # ===== USER INFO =====
-        "balance_info": "💰 ቀሪ: {balance} ብር\n🎫 ቲኬቶች: {tickets}\n💸 አጠቃላይ: {spent} ብር",
-        "your_tickets": "🎫 ቲኬቶችዎ ({count}):\n",
-        "support_info": "💬 የድጋፍ ቻናል: {channel}",
-        "prize_list": "🏆 10 ሽልማቶች:\n1ኛ: BWD Leopard 3 (8,000,000 ብር)\n2ኛ: Hyundai Bayon (5,000,000 ብር)\n3ኛ: የሱቅ ቦታ (4,000,000 ብር)\n4ኛ-7ኛ: 1,000,000 ብር\n8ኛ: 500,000 ብር\n9ኛ: 300,000 ብር\n10ኛ: 200,000 ብር",
-        
+        "balance_info": (
+            "💰 ቀሪ ሂሳብ፦ {balance} ብር\n"
+            "🎫 ቲኬቶች፦ {tickets}\n"
+            "💸 አጠቃላይ የተከፈለ፦ {spent} ብር"
+        ),
+        "your_tickets": "🎫 የእርስዎ ቲኬቶች ({count})፦\n",
+        "support_info": "💬 የድጋፍ ቻናል፦ {channel}",
+        "prize_list": (
+            "🏆 10 ሽልማቶች፦\n"
+            "1ኛ፦ BWD Leopard 3 (8,000,000 ብር)\n"
+            "2ኛ፦ Hyundai Bayon (5,000,000 ብር)\n"
+            "3ኛ፦ የሱቅ ቦታ (4,000,000 ብር)\n"
+            "4ኛ–7ኛ፦ እያንዳንዳቸው 1,000,000 ብር\n"
+            "8ኛ፦ 500,000 ብር\n"
+            "9ኛ፦ 300,000 ብር\n"
+            "10ኛ፦ 200,000 ብር"
+        ),
+
         # ===== ADMIN =====
         "admin": "🛠️ አስተዳዳሪ",
-        "admin_panel": "🛠️ የአስተዳዳሪ ፓነል - አማራጭ ይምረጡ:",
+        "admin_panel": "🛠️ የአስተዳዳሪ ፓነል – አማራጭ ይምረጡ፦",
         "verify": "✅ ክፍያዎችን አረጋግጥ",
         "users": "👤 ተጠቃሚዎች",
-        "refund": "🔄 መመለስ",
+        "refund": "🔄 ገንዘብ መመለስ",
         "broadcast": "📢 ማስታወቂያ",
         "reports": "📊 ሪፖርቶች",
-        "buy_for_user": "🎯 ለሌላ ግዛ",
-        "manual_ticket": "📝 በእጅ አስገባ",
-        "no_users": "📭 ምንም ተጠቃሚ የለም።",
-        "no_refund": "✅ ቀሪ ያላቸው ተጠቃሚዎች የሉም።",
-        "refund_complete": "✅ {amount} ብር ተመልሷል።",
-        "refund_all": "✅ {total} ብር ለ {count} ተጠቃሚዎች ተመልሷል።",
-        "broadcast_sent": "✅ ለ {sent}/{total} ተልኳል።",
-        "user_not_found": "❌ ተጠቃሚ አልተገኘም!",
-        "user_added": "✅ ተጠቃሚ ተጨምሯል!",
-        "enter_user_id": "📝 የተጠቃሚውን ቴሌግራም መታወቂያ ያስገቡ:",
-        "enter_ticket_number": "📝 የቲኬት ቁጥር ያስገቡ (ወይም 'random'):",
-        "ticket_assigned": "✅ ቲኬት #{ticket} ለተጠቃሚ ተመድቧል!",
-        "ticket_already_sold": "❌ ቲኬቱ ቀድሞውኑ ተሽጧል!",
+        "buy_for_user": "🎯 ለተጠቃሚ ቲኬት ግዛ",
+        "manual_ticket": "📝 በእጅ ቲኬት መመደብ",
+        "no_users": "📭 ምንም ተጠቃሚ አልተገኘም።",
+        "no_refund": "✅ ቀሪ ሂሳብ ያላቸው ለመመለስ የሚጠበቁ ተጠቃሚዎች የሉም።",
+        "refund_complete": "✅ {amount} ብር ተመላሽ ተደርጓል።",
+        "refund_all": "✅ በአጠቃላይ {total} ብር ለ{count} ተጠቃሚዎች ተመላሽ ተደርጓል።",
+        "broadcast_sent": "✅ መልዕክቱ ለ{sent} / {total} ተጠቃሚዎች ተልኳል።",
+        "user_not_found": "❌ ተጠቃሚው አልተገኘም!",
+        "user_added": "✅ ተጠቃሚው በተሳካ ሁኔታ ተጨምሯል!",
+        "enter_user_id": "📝 የተጠቃሚውን የቴሌግራም መለያ ቁጥር (Telegram ID) ያስገቡ፦",
+        "enter_ticket_number": "📝 የቲኬት ቁጥር ያስገቡ ወይም 'random' ብለው ይጻፉ፦",
+        "ticket_assigned": "✅ ቲኬት #{ticket} ለተጠቃሚው ተመድቧል!",
+        "ticket_already_sold": "❌ ይህ ቲኬት ቀድሞ ተሽጧል!",
         "add_user": "➕ ተጠቃሚ ጨምር",
         "delete_user": "🗑️ ተጠቃሚ ሰርዝ",
-        "enter_phone": "📝 ስልክ ቁጥር ያስገቡ:",
-        "enter_address": "📝 አድራሻ ያስገቡ:",
-        "user_deleted": "✅ ተጠቃሚ ተሰርዟል!",
+        "enter_phone": "📝 ስልክ ቁጥር ያስገቡ፦",
+        "enter_address": "📝 አድራሻ ያስገቡ፦",
+        "user_deleted": "✅ ተጠቃሚው በተሳካ ሁኔታ ተሰርዟል!",
     }
 }
 # =====================================================
@@ -469,45 +508,69 @@ def get_text(user_id: int, key: str, **kwargs) -> str:
 # KEYBOARDS
 # =====================================================
 
-def choice_menu() -> ReplyKeyboardMarkup:
+def choice_menu(uid: int) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="🤖 Use Telegram")],
-            [KeyboardButton(text="🌐 Open Web")],
-            [KeyboardButton(text="ℹ️ About")],
+            [KeyboardButton(text=get_text(uid, "use_telegram"))],
+            [KeyboardButton(text=get_text(uid, "open_web"))],
+            [KeyboardButton(text=get_text(uid, "about"))],
         ],
         resize_keyboard=True
     )
+
 
 def user_menu(uid: int) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="🎯 Buy Ticket"), KeyboardButton(text="🎫 My Tickets")],
-            [KeyboardButton(text="💰 Balance"), KeyboardButton(text="🏆 Prizes")],
-            [KeyboardButton(text="💬 Support"), KeyboardButton(text="🌍 Language")],
+            [
+                KeyboardButton(text=get_text(uid, "buy")),
+                KeyboardButton(text=get_text(uid, "tickets"))
+            ],
+            [
+                KeyboardButton(text=get_text(uid, "balance")),
+                KeyboardButton(text=get_text(uid, "prizes"))
+            ],
+            [
+                KeyboardButton(text=get_text(uid, "support")),
+                KeyboardButton(text=get_text(uid, "lang"))
+            ],
         ],
         resize_keyboard=True
     )
+
 
 def buy_menu(uid: int) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="🎲 Random Ticket")],
-            [KeyboardButton(text="✏️ Type Number")],
-            [KeyboardButton(text="📦 Choose Block (50 tickets)")],
-            [KeyboardButton(text="🔙 Back")],
+            [KeyboardButton(text=get_text(uid, "random_pick"))],
+            [KeyboardButton(text=get_text(uid, "type_number"))],
+            [KeyboardButton(text=get_text(uid, "choose_block"))],
+            [KeyboardButton(text=get_text(uid, "back"))],
         ],
         resize_keyboard=True
     )
 
+
 def admin_menu(uid: int) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="🛠️ Admin Panel")],
-            [KeyboardButton(text="✅ Verify Payments"), KeyboardButton(text="👤 Users")],
-            [KeyboardButton(text="🔄 Refund"), KeyboardButton(text="📢 Broadcast")],
-            [KeyboardButton(text="📊 Reports"), KeyboardButton(text="🎯 Buy for User")],
-            [KeyboardButton(text="📝 Manual Ticket"), KeyboardButton(text="🔙 Back to User")],
+            [KeyboardButton(text=get_text(uid, "admin"))],
+            [
+                KeyboardButton(text=get_text(uid, "verify")),
+                KeyboardButton(text=get_text(uid, "users"))
+            ],
+            [
+                KeyboardButton(text=get_text(uid, "refund")),
+                KeyboardButton(text=get_text(uid, "broadcast"))
+            ],
+            [
+                KeyboardButton(text=get_text(uid, "reports")),
+                KeyboardButton(text=get_text(uid, "buy_for_user"))
+            ],
+            [
+                KeyboardButton(text=get_text(uid, "manual_ticket")),
+                KeyboardButton(text=get_text(uid, "back_user"))
+            ],
         ],
         resize_keyboard=True
     )
