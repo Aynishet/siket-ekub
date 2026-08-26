@@ -1,1607 +1,736 @@
-# =====================================================
-# BOT.PY - SIKET EKUB COMPLETE - FULLY FIXED
-# =====================================================
-
-import sys
+# database.py - Complete PostgreSQL Version with All Features
 import os
 import logging
 import asyncio
-import random
-import io
-import ssl
-import base64
 from datetime import datetime
-from threading import Lock
-
-if sys.platform == "win32":
-    sys.stdout.reconfigure(encoding='utf-8')
-    sys.stderr.reconfigure(encoding='utf-8')
-
-from aiogram import Bot, Dispatcher, F, Router
-from aiogram.filters import Command
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
-from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import (
-    Message, CallbackQuery, ReplyKeyboardMarkup, KeyboardButton,
-    InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove,
-    BufferedInputFile, BotCommand, WebAppInfo
-)
-
-import asyncpg
-from dotenv import load_dotenv
 
 # =====================================================
-# ENV SETUP
+# DATABASE CONFIGURATION
 # =====================================================
-ssl._create_default_https_context = ssl._create_unverified_context
-basedir = os.path.abspath(os.path.dirname(__file__))
-load_dotenv(os.path.join(basedir, '.env'))
 
-TOKEN = os.getenv("BOT_TOKEN", "").strip()
-admin_ids_raw = os.getenv("ADMIN_IDS", "")
-ADMIN_IDS = [int(x.strip()) for x in admin_ids_raw.split(",") if x.strip()]
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_NAME = os.path.join(BASE_DIR, 'instance', 'siket_ekub.db')  # For SQLite fallback
 
-if not TOKEN or not ADMIN_IDS:
-    raise ValueError("BOT_TOKEN and ADMIN_IDS required!")
+# Try to import asyncpg, fallback to aiosqlite
+try:
+    import asyncpg
+    POSTGRES_AVAILABLE = True
+except ImportError:
+    POSTGRES_AVAILABLE = False
+    import aiosqlite
 
-DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-    raise ValueError("DATABASE_URL is missing!")
-
-WEBAPP_URL = os.getenv("WEBAPP_URL", "https://siket-ekub-webapp.onrender.com")
-SUPPORT_CHANNEL_LINK = os.getenv("SUPPORT_CHANNEL_LINK", "https://t.me/siketekub")
-TICKET_CHANNEL_LINK = os.getenv("TICKET_CHANNEL_LINK", "https://t.me/siketekubtiketo")
-TICKET_CHANNEL_ID = os.getenv("TICKET_CHANNEL_ID", "@siketekubtiketo")
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+# Get database URL from environment
+DATABASE_URL = os.environ.get('DATABASE_URL')
 
 # =====================================================
-# BOT INITIALIZATION
+# DATABASE HELPER - WORKS WITH BOTH SQLITE AND POSTGRES
 # =====================================================
-storage = MemoryStorage()
-telegram_bot = Bot(token=TOKEN)
-dp = Dispatcher(storage=storage)
-router = Router()
 
-# =====================================================
-# POSTGRESQL CONNECTION
-# =====================================================
-db_pool = None
-
-async def get_db_pool():
-    global db_pool
-    if db_pool is None:
-        db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10)
-        logger.info("✅ PostgreSQL connected")
-    return db_pool
-
-# =====================================================
-# DATABASE HELPER
-# =====================================================
 class DatabaseHelper:
     @staticmethod
-    async def fetch_one(query: str, *params):
-        pool = await get_db_pool()
-        async with pool.acquire() as conn:
-            if params:
-                return await conn.fetchrow(query, *params)
-            return await conn.fetchrow(query)
-    
-    @staticmethod
-    async def fetch(query: str, *params):
-        pool = await get_db_pool()
-        async with pool.acquire() as conn:
-            if params:
-                return await conn.fetch(query, *params)
-            return await conn.fetch(query)
-    
-    @staticmethod
-    async def execute(query: str, *params):
-        pool = await get_db_pool()
-        async with pool.acquire() as conn:
-            if params:
-                return await conn.execute(query, *params)
-            return await conn.execute(query)
+    async def execute(query: str, params: tuple = None):
+        if DATABASE_URL and POSTGRES_AVAILABLE:
+            conn = await asyncpg.connect(DATABASE_URL)
+            try:
+                if params:
+                    result = await conn.execute(query, *params)
+                else:
+                    result = await conn.execute(query)
+                return result
+            finally:
+                await conn.close()
+        else:
+            import aiosqlite
+            async with aiosqlite.connect(DB_NAME) as db:
+                await db.execute("PRAGMA journal_mode=WAL;")
+                cursor = await db.execute(query, params or ())
+                await db.commit()
+                return cursor
     
     @staticmethod
     async def execute_transaction(queries: list):
-        pool = await get_db_pool()
-        async with pool.acquire() as conn:
-            async with conn.transaction():
-                for item in queries:
-                    if isinstance(item, tuple):
-                        query = item[0]
-                        params = item[1:] if len(item) > 1 else []
+        if DATABASE_URL and POSTGRES_AVAILABLE:
+            conn = await asyncpg.connect(DATABASE_URL)
+            try:
+                async with conn.transaction():
+                    for query, params in queries:
                         if params:
                             await conn.execute(query, *params)
                         else:
                             await conn.execute(query)
-                    else:
-                        await conn.execute(item)
                 return True
+            finally:
+                await conn.close()
+        else:
+            import aiosqlite
+            async with aiosqlite.connect(DB_NAME) as db:
+                await db.execute("PRAGMA journal_mode=WAL;")
+                try:
+                    await db.execute("BEGIN EXCLUSIVE")
+                    for query, params in queries:
+                        await db.execute(query, params or ())
+                    await db.commit()
+                    return True
+                except Exception as e:
+                    await db.rollback()
+                    raise e
+    
+    @staticmethod
+    async def fetch(query: str, params: tuple = None):
+        if DATABASE_URL and POSTGRES_AVAILABLE:
+            conn = await asyncpg.connect(DATABASE_URL)
+            try:
+                if params:
+                    rows = await conn.fetch(query, *params)
+                else:
+                    rows = await conn.fetch(query)
+                return rows
+            finally:
+                await conn.close()
+        else:
+            import aiosqlite
+            async with aiosqlite.connect(DB_NAME) as db:
+                await db.execute("PRAGMA journal_mode=WAL;")
+                cursor = await db.execute(query, params or ())
+                return await cursor.fetchall()
+    
+    @staticmethod
+    async def fetch_one(query: str, params: tuple = None):
+        if DATABASE_URL and POSTGRES_AVAILABLE:
+            conn = await asyncpg.connect(DATABASE_URL)
+            try:
+                if params:
+                    row = await conn.fetchrow(query, *params)
+                else:
+                    row = await conn.fetchrow(query)
+                return row
+            finally:
+                await conn.close()
+        else:
+            import aiosqlite
+            async with aiosqlite.connect(DB_NAME) as db:
+                await db.execute("PRAGMA journal_mode=WAL;")
+                cursor = await db.execute(query, params or ())
+                return await cursor.fetchone()
 
 # =====================================================
-# INIT DATABASE - FIXED WITH ALL COLUMNS
+# INITIALIZE DATABASE
 # =====================================================
-async def init_db_postgres():
-    pool = await get_db_pool()
-    async with pool.acquire() as conn:
+
+async def init_db():
+    """Initialize database with all tables and default data"""
+    print("📊 Initializing database...")
+    
+    if DATABASE_URL and POSTGRES_AVAILABLE:
+        await init_postgres()
+    else:
+        await init_sqlite()
+
+async def init_postgres():
+    """Initialize PostgreSQL database"""
+    conn = await asyncpg.connect(DATABASE_URL)
+    
+    try:
         # Users table
-        await conn.execute("""
+        await conn.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 user_id SERIAL PRIMARY KEY,
                 telegram_id BIGINT UNIQUE NOT NULL,
-                full_name VARCHAR(255),
-                phone_number VARCHAR(20),
-                address TEXT,
-                balance DECIMAL(15,2) DEFAULT 0,
-                total_spent DECIMAL(15,2) DEFAULT 0,
-                language VARCHAR(10) DEFAULT 'en',
+                phone_number TEXT NOT NULL,
+                address TEXT NOT NULL,
+                full_name TEXT,
+                registration_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                is_active BOOLEAN DEFAULT TRUE,
+                is_blocked BOOLEAN DEFAULT FALSE,
+                language TEXT DEFAULT 'en',
+                balance DECIMAL(10,2) DEFAULT 0.0,
+                total_spent DECIMAL(10,2) DEFAULT 0.0
+            )
+        ''')
+        
+        # Ticket types
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS ticket_types (
+                type_id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                total_slots INTEGER NOT NULL DEFAULT 20000,
+                price DECIMAL(10,2) NOT NULL DEFAULT 3000.00,
                 is_active BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
-        """)
+        ''')
         
-        # Tickets table
-        await conn.execute("""
+        # Tickets table - FIXED with all columns
+        await conn.execute('''
             CREATE TABLE IF NOT EXISTS tickets (
                 ticket_id SERIAL PRIMARY KEY,
-                ticket_number INTEGER UNIQUE NOT NULL,
-                type_id INTEGER DEFAULT 1,
-                ticket_code VARCHAR(50),
-                status VARCHAR(20) DEFAULT 'available',
-                user_id INTEGER REFERENCES users(user_id),
+                type_id INTEGER NOT NULL,
+                ticket_code TEXT NOT NULL UNIQUE,
+                ticket_number INTEGER NOT NULL,
+                status TEXT DEFAULT 'available',
+                user_id INTEGER,
                 telegram_id BIGINT,
-                phone_number VARCHAR(20),
-                full_name VARCHAR(255),
-                assigned_at TIMESTAMP
-            )
-        """)
-        
-        # Payments table - FIXED with all columns
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS payments (
-                payment_id SERIAL PRIMARY KEY,
-                user_id INTEGER REFERENCES users(user_id),
-                telegram_id BIGINT,
-                phone_number VARCHAR(20),
-                full_name VARCHAR(255),
-                ticket_id INTEGER REFERENCES tickets(ticket_id),
-                ticket_number INTEGER,
-                amount DECIMAL(15,2) DEFAULT 3000,
-                raw_sms TEXT,
-                extracted_ref VARCHAR(100),
-                extracted_amount DECIMAL(15,2),
-                extracted_date VARCHAR(50),
-                status VARCHAR(20) DEFAULT 'pending',
-                screenshot_data TEXT,
-                admin_notes TEXT,
-                verified_by INTEGER,
-                verified_at TIMESTAMP,
+                phone_number TEXT,
+                full_name TEXT,
+                assigned_at TIMESTAMP,
+                refunded_at TIMESTAMP,
+                refund_reason TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
-        """)
+        ''')
         
-        # Refunds table
-        await conn.execute("""
+        # Payments table - FIXED with all columns including full_name, phone_number, amount
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS payments (
+                payment_id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                telegram_id BIGINT NOT NULL,
+                phone_number TEXT,
+                full_name TEXT,
+                ticket_id INTEGER NOT NULL,
+                ticket_number INTEGER NOT NULL,
+                amount DECIMAL(15,2) DEFAULT 3000,
+                raw_sms TEXT,
+                extracted_ref TEXT,
+                extracted_amount DECIMAL(10,2),
+                extracted_date TEXT,
+                status TEXT DEFAULT 'pending',
+                verified_by INTEGER,
+                verified_at TIMESTAMP,
+                refunded_at TIMESTAMP,
+                refund_reason TEXT,
+                admin_notes TEXT,
+                is_underpayment BOOLEAN DEFAULT FALSE,
+                screenshot_data TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Prizes
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS prizes (
+                prize_id SERIAL PRIMARY KEY,
+                type_id INTEGER NOT NULL,
+                prize_position INTEGER,
+                prize_name TEXT NOT NULL,
+                prize_description TEXT,
+                prize_value DECIMAL(10,2),
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Refunds
+        await conn.execute('''
             CREATE TABLE IF NOT EXISTS refunds (
                 refund_id SERIAL PRIMARY KEY,
-                user_id INTEGER REFERENCES users(user_id),
-                telegram_id BIGINT,
-                phone_number VARCHAR(20),
-                refund_amount DECIMAL(15,2),
+                user_id INTEGER NOT NULL,
+                telegram_id BIGINT NOT NULL,
+                phone_number TEXT NOT NULL,
+                ticket_id INTEGER NOT NULL,
+                ticket_number INTEGER NOT NULL,
+                payment_id INTEGER NOT NULL,
+                refund_amount DECIMAL(10,2) NOT NULL,
                 refund_reason TEXT,
-                status VARCHAR(20) DEFAULT 'pending',
+                status TEXT DEFAULT 'pending',
                 processed_by INTEGER,
                 processed_at TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
+        ''')
+        
+        # Winner history
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS winner_history (
+                winner_id SERIAL PRIMARY KEY,
+                type_id INTEGER NOT NULL,
+                prize_id INTEGER NOT NULL,
+                ticket_id INTEGER NOT NULL,
+                ticket_number INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                telegram_id BIGINT NOT NULL,
+                phone_number TEXT NOT NULL,
+                winning_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                claim_status TEXT DEFAULT 'pending',
+                claimed_at TIMESTAMP,
+                notes TEXT
+            )
+        ''')
+        
+        # User activity
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS user_activity (
+                activity_id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                telegram_id BIGINT NOT NULL,
+                activity_type TEXT NOT NULL,
+                activity_details TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Bot settings
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS bot_settings (
+                setting_id SERIAL PRIMARY KEY,
+                setting_key TEXT UNIQUE NOT NULL,
+                setting_value TEXT,
+                setting_type TEXT DEFAULT 'string',
+                description TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Indexes
+        await conn.execute('CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id)')
+        await conn.execute('CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status)')
+        await conn.execute('CREATE INDEX IF NOT EXISTS idx_tickets_telegram ON tickets(telegram_id)')
+        await conn.execute('CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status)')
+        await conn.execute('CREATE INDEX IF NOT EXISTS idx_payments_telegram ON payments(telegram_id)')
+        
+        # Check and create default data
+        result = await conn.fetchrow("SELECT type_id FROM ticket_types LIMIT 1")
+        if not result:
+            print("🎮 Creating default lottery game...")
+            
+            await conn.execute('''
+                INSERT INTO ticket_types (name, description, total_slots, price, is_active)
+                VALUES ($1, $2, $3, $4, $5)
+            ''', ("Siket Ekub Main Draw", "Main lottery draw with 10 exciting prizes", 20000, 3000.00, True))
+            
+            type_id = await conn.fetchval("SELECT LASTVAL()")
+            
+            print(f"🎫 Generating 20,000 tickets...")
+            batch_size = 1000
+            for i in range(1, 20001, batch_size):
+                end = min(i + batch_size - 1, 20000)
+                for j in range(i, end + 1):
+                    await conn.execute('''
+                        INSERT INTO tickets (type_id, ticket_code, ticket_number, status)
+                        VALUES ($1, $2, $3, $4)
+                    ''', (type_id, f"{type_id}_{j}", j, 'available'))
+                print(f"   Generated {end} tickets...")
+            
+            prizes = [
+                (type_id, 1, 'BWD Leopard 3', 'Brand new BWD Leopard 3 car', 4500000.00),
+                (type_id, 2, 'Hyundai Bayon', 'Brand new Hyundai Bayon car', 3200000.00),
+                (type_id, 3, 'Bole Dema Hop – Shop Space', 'Commercial shop space', 2000000.00),
+                (type_id, 4, '1,000,000 ETB Cash', 'Cash prize', 1000000.00),
+                (type_id, 5, '1,000,000 ETB Cash', 'Cash prize', 1000000.00),
+                (type_id, 6, '1,000,000 ETB Cash', 'Cash prize', 1000000.00),
+                (type_id, 7, '1,000,000 ETB Cash', 'Cash prize', 1000000.00),
+                (type_id, 8, '500,000 ETB Cash', 'Cash prize', 500000.00),
+                (type_id, 9, '300,000 ETB Cash', 'Cash prize', 300000.00),
+                (type_id, 10, '200,000 ETB Cash', 'Cash prize', 200000.00),
+            ]
+            
+            for prize in prizes:
+                await conn.execute('''
+                    INSERT INTO prizes (type_id, prize_position, prize_name, prize_description, prize_value)
+                    VALUES ($1, $2, $3, $4, $5)
+                ''', prize)
+            
+            print("✅ Default data created successfully with 20,000 tickets!")
+        
+        # =====================================================
+        # FIX: Add missing columns to existing tables
+        # =====================================================
+        
+        # Fix tickets table - add full_name if missing
+        try:
+            await conn.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS full_name TEXT")
+            print("✅ Added full_name to tickets")
+        except Exception as e:
+            print(f"full_name tickets: {e}")
+        
+        try:
+            await conn.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS phone_number TEXT")
+            print("✅ Added phone_number to tickets")
+        except Exception as e:
+            print(f"phone_number tickets: {e}")
+        
+        # Fix payments table - add all missing columns
+        try:
+            await conn.execute("ALTER TABLE payments ADD COLUMN IF NOT EXISTS full_name TEXT")
+            print("✅ Added full_name to payments")
+        except Exception as e:
+            print(f"full_name payments: {e}")
+        
+        try:
+            await conn.execute("ALTER TABLE payments ADD COLUMN IF NOT EXISTS phone_number TEXT")
+            print("✅ Added phone_number to payments")
+        except Exception as e:
+            print(f"phone_number payments: {e}")
+        
+        try:
+            await conn.execute("ALTER TABLE payments ADD COLUMN IF NOT EXISTS amount DECIMAL(15,2) DEFAULT 3000")
+            print("✅ Added amount to payments")
+        except Exception as e:
+            print(f"amount payments: {e}")
+        
+        # Verify columns exist
+        columns = await conn.fetch("""
+            SELECT column_name FROM information_schema.columns 
+            WHERE table_name = 'payments' 
+            ORDER BY ordinal_position
         """)
         
-        # Create indexes
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_payments_telegram_id ON payments(telegram_id)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_tickets_telegram_id ON tickets(telegram_id)")
+        print("\n📊 Payments table columns:")
+        for col in columns:
+            print(f"  - {col['column_name']}")
         
-        logger.info("✅ PostgreSQL tables ready")
-
-# =====================================================
-# GENERATE TICKETS
-# =====================================================
-async def generate_tickets():
-    try:
-        pool = await get_db_pool()
-        async with pool.acquire() as conn:
-            # Fix columns if needed
-            try:
-                await conn.execute("ALTER TABLE tickets ALTER COLUMN type_id DROP NOT NULL")
-            except:
-                pass
-            
-            try:
-                await conn.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS full_name VARCHAR(255)")
-            except:
-                pass
-            
-            try:
-                await conn.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS ticket_code VARCHAR(50)")
-            except:
-                pass
-            
-            # Fix payments columns
-            try:
-                await conn.execute("ALTER TABLE payments ADD COLUMN IF NOT EXISTS full_name VARCHAR(255)")
-            except:
-                pass
-            
-            try:
-                await conn.execute("ALTER TABLE payments ADD COLUMN IF NOT EXISTS phone_number VARCHAR(20)")
-            except:
-                pass
-            
-            try:
-                await conn.execute("ALTER TABLE payments ADD COLUMN IF NOT EXISTS amount DECIMAL(15,2) DEFAULT 3000")
-            except:
-                pass
-            
-            count = await conn.fetchval("SELECT COUNT(*) FROM tickets")
-            if count and count > 0:
-                logger.info(f"✅ {count} tickets already exist")
-                available = await conn.fetchval("SELECT COUNT(*) FROM tickets WHERE status = 'available'")
-                logger.info(f"🎫 Available tickets: {available}")
-                
-                if available == 0 and count > 0:
-                    logger.info("🔄 Resetting tickets to available...")
-                    await conn.execute("""
-                        UPDATE tickets 
-                        SET status = 'available', user_id = NULL, telegram_id = NULL, 
-                        phone_number = NULL, full_name = NULL, assigned_at = NULL 
-                        WHERE status != 'available'
-                    """)
-                    logger.info("✅ Reset tickets to available")
-                return
-            
-            logger.info("🎫 Generating 20000 tickets...")
-            batch_size = 500
-            for start in range(1, 20001, batch_size):
-                end = min(start + batch_size - 1, 20000)
-                values = []
-                for i in range(start, end + 1):
-                    ticket_code = f"TKT-{i:05d}"
-                    values.append(f"({i}, 1, '{ticket_code}', 'available')")
-                query = f"INSERT INTO tickets (ticket_number, type_id, ticket_code, status) VALUES {','.join(values)}"
-                await conn.execute(query)
-                logger.info(f"✅ Generated tickets {start}-{end}")
-            
-            final_count = await conn.fetchval("SELECT COUNT(*) FROM tickets")
-            logger.info(f"✅ All {final_count} tickets generated successfully!")
+        print("✅ PostgreSQL Database ready!")
+        
     except Exception as e:
-        logger.error(f"❌ Error generating tickets: {e}")
+        print(f"❌ Database initialization error: {e}")
+        raise
+    finally:
+        await conn.close()
 
-# =====================================================
-# LANGUAGE TEXTS
-# =====================================================
-TEXTS = {
-    "en": {
-        "welcome": "🎰 Welcome to Siket Ekub!",
-        "menu": "📋 Main Menu",
-        "buy": "🎯 Buy Ticket",
-        "tickets": "🎫 My Tickets",
-        "prizes": "🏆 Prizes",
-        "balance": "💰 Balance",
-        "support": "💬 Support",
-        "lang": "🌍 Language",
-        "reg_phone": "📱 Share your phone number:",
-        "reg_address": "📍 Enter your address:",
-        "reg_name": "📝 Enter your full name:",
-        "registered": "✅ Registration complete!",
-        "pick_ticket": "🎫 Choose how to pick your ticket:",
-        "random_pick": "🎲 Random Ticket",
-        "type_number": "✏️ Type Number",
-        "choose_block": "📦 Choose Block (50 tickets)",
-        "back": "🔙 Back",
-        "pay": "💰 Pay 3,000 ETB to:\nCBE: 1000786684491\nAbyssinia: 264517826\nTelebirr: 0979774444\n\n📸 Send payment screenshot:",
-        "pay_submitted": "✅ Payment submitted! Waiting for admin verification.",
-        "pay_approved": "✅ Ticket #{ticket} approved!",
-        "pay_rejected": "❌ Payment rejected.",
-        "no_tickets": "📭 No tickets available.",
-        "no_tickets_owned": "📭 You have no tickets yet.",
-        "prize_list": "🏆 10 PRIZES:\n1st: BWD Leopard 3 (8,000,000 ETB)\n2nd: Hyundai Bayon (5,000,000 ETB)\n3rd: Shop Space (4,000,000 ETB)\n4th-7th: 1,000,000 ETB each\n8th: 500,000 ETB\n9th: 300,000 ETB\n10th: 200,000 ETB",
-        "balance_info": "💰 Balance: {balance} ETB\n🎫 Tickets: {tickets}\n💸 Total Spent: {spent} ETB",
-        "admin": "🛠️ Admin",
-        "verify": "✅ Verify Payments",
-        "users": "👤 Users",
-        "refund": "🔄 Refund",
-        "broadcast": "📢 Broadcast",
-        "reports": "📊 Reports",
-        "buy_for_user": "🎯 Buy for User",
-        "manual_ticket": "📝 Manual Ticket",
-        "choose_lang": "🌍 Choose language:",
-        "lang_changed": "✅ Language changed!",
-        "refund_complete": "✅ Refunded {amount} ETB.",
-        "refund_all": "✅ Refunded {total} ETB to {count} users.",
-        "no_refund": "✅ No users with balance.",
-        "broadcast_sent": "✅ Sent to {sent}/{total} users.",
-        "support_info": "💬 Support Channel: {channel}",
-        "your_tickets": "🎫 Your Tickets ({count}):\n",
-        "choose_interface": "🎰 Choose how to play:",
-        "use_telegram": "🤖 Use Telegram",
-        "open_web": "🌐 Open Web",
-        "about": "ℹ️ About",
-        "sold": "SOLD",
-        "select_block": "📦 Select a block (50 tickets each):",
-        "enter_number": "✏️ Enter ticket number (1-20000):",
-        "invalid_number": "❌ Invalid number. Please enter 1-20000.",
-        "ticket_not_found": "❌ Ticket not found or already taken.",
-        "ticket_taken": "❌ Ticket already taken.",
-        "admin_panel": "🛠️ Admin Panel",
-        "back_user": "🔙 Back to User",
-        "no_users": "📭 No users found.",
-        "registration_required": "❌ Please /start first to register.",
-        "user_not_found": "❌ User not found!",
-        "user_already_registered": "✅ User already registered!",
-        "user_added": "✅ User added successfully!",
-        "enter_user_id": "📝 Enter user Telegram ID:",
-        "enter_ticket_number": "📝 Enter ticket number (or 'random'):",
-        "ticket_assigned": "✅ Ticket #{ticket} assigned to user!",
-        "ticket_already_sold": "❌ Ticket already sold!",
-    },
-    "am": {
-        "welcome": "🎰 እንኳን ወደ ስኬት እቁብ በደህና መጡ!",
-        "menu": "📋 ዋና ምናሌ",
-        "buy": "🎯 ቲኬት ግዛ",
-        "tickets": "🎫 ቲኬቶቼ",
-        "prizes": "🏆 ሽልማቶች",
-        "balance": "💰 ቀሪ",
-        "support": "💬 ድጋፍ",
-        "lang": "🌍 ቋንቋ",
-        "reg_phone": "📱 ስልክ ቁጥርዎን ያጋሩ:",
-        "reg_address": "📍 አድራሻዎን ያስገቡ:",
-        "reg_name": "📝 ሙሉ ስምዎን ያስገቡ:",
-        "registered": "✅ ምዝገባ ተጠናቋል!",
-        "pick_ticket": "🎫 ቲኬት ለመምረጥ ይምረጡ:",
-        "random_pick": "🎲 በዘፈቀደ",
-        "type_number": "✏️ ቁጥር ይጻፉ",
-        "choose_block": "📦 ብሎክ ምረጥ (50 ቲኬቶች)",
-        "back": "🔙 ወደ ኋላ",
-        "pay": "💰 3,000 ብር ክፈሉ:\nCBE: 1000786684491\nአቢሲኒያ: 264517826\nተሌብር: 0979774444\n\n📸 የክፍያ ስክሪንሾት ይላኩ:",
-        "pay_submitted": "✅ ክፍያ ተልኳል! አስተዳዳሪ እየጠበቀ ነው።",
-        "pay_approved": "✅ ቲኬት #{ticket} ጸድቋል!",
-        "pay_rejected": "❌ ክፍያ ውድቅ ተደርጓል።",
-        "no_tickets": "📭 ምንም ቲኬት የለም።",
-        "no_tickets_owned": "📭 እስካሁን ምንም ቲኬት የለዎትም።",
-        "prize_list": "🏆 10 ሽልማቶች:\n1ኛ: BWD Leopard 3 (8,000,000 ብር)\n2ኛ: Hyundai Bayon (5,000,000 ብር)\n3ኛ: የሱቅ ቦታ (4,000,000 ብር)\n4ኛ-7ኛ: 1,000,000 ብር\n8ኛ: 500,000 ብር\n9ኛ: 300,000 ብር\n10ኛ: 200,000 ብር",
-        "balance_info": "💰 ቀሪ: {balance} ብር\n🎫 ቲኬቶች: {tickets}\n💸 አጠቃላይ: {spent} ብር",
-        "admin": "🛠️ አስተዳዳሪ",
-        "verify": "✅ ክፍያዎችን አረጋግጥ",
-        "users": "👤 ተጠቃሚዎች",
-        "refund": "🔄 መመለስ",
-        "broadcast": "📢 ማስታወቂያ",
-        "reports": "📊 ሪፖርቶች",
-        "buy_for_user": "🎯 ለሌላ ግዛ",
-        "manual_ticket": "📝 በእጅ አስገባ",
-        "choose_lang": "🌍 ቋንቋ ምረጥ:",
-        "lang_changed": "✅ ቋንቋ ተቀይሯል!",
-        "refund_complete": "✅ {amount} ብር ተመልሷል።",
-        "refund_all": "✅ {total} ብር ለ {count} ተጠቃሚዎች ተመልሷል።",
-        "no_refund": "✅ ቀሪ ያላቸው ተጠቃሚዎች የሉም።",
-        "broadcast_sent": "✅ ለ {sent}/{total} ተልኳል።",
-        "support_info": "💬 የድጋፍ ቻናል: {channel}",
-        "your_tickets": "🎫 ቲኬቶችዎ ({count}):\n",
-        "choose_interface": "🎰 እንዴት መጫወት ይፈልጋሉ?",
-        "use_telegram": "🤖 በቴሌግራም",
-        "open_web": "🌐 በድረ-ገጽ",
-        "about": "ℹ️ መረጃ",
-        "sold": "ተሽጧል",
-        "select_block": "📦 ብሎክ ምረጥ (50 ቲኬቶች):",
-        "enter_number": "✏️ ቲኬት ቁጥር ያስገቡ (1-20000):",
-        "invalid_number": "❌ ልክ ያልሆነ ቁጥር። እባክዎ 1-20000 ያስገቡ።",
-        "ticket_not_found": "❌ ቲኬቱ አልተገኘም ወይም ተወስዷል።",
-        "ticket_taken": "❌ ቲኬቱ ተወስዷል።",
-        "admin_panel": "🛠️ የአስተዳዳሪ ፓነል",
-        "back_user": "🔙 ወደ ተጠቃሚ",
-        "no_users": "📭 ምንም ተጠቃሚ የለም።",
-        "registration_required": "❌ እባክዎ ለመመዝገብ /start ይጫኑ።",
-        "user_not_found": "❌ ተጠቃሚ አልተገኘም!",
-        "user_already_registered": "✅ ተጠቃሚው ቀድሞውኑ ተመዝግቧል!",
-        "user_added": "✅ ተጠቃሚ ተጨምሯል!",
-        "enter_user_id": "📝 የተጠቃሚውን ቴሌግራም መታወቂያ ያስገቡ:",
-        "enter_ticket_number": "📝 የቲኬት ቁጥር ያስገቡ (ወይም 'random'):",
-        "ticket_assigned": "✅ ቲኬት #{ticket} ለተጠቃሚ ተመድቧል!",
-        "ticket_already_sold": "❌ ቲኬቱ ቀድሞውኑ ተሽጧል!",
-    }
-}
-
-# =====================================================
-# LANGUAGE CACHE
-# =====================================================
-class LangCache:
-    _cache = {}
-    _lock = Lock()
+async def init_sqlite():
+    """Initialize SQLite database"""
+    import aiosqlite
+    import os
     
-    @classmethod
-    def get(cls, user_id: int) -> str:
-        with cls._lock:
-            return cls._cache.get(user_id, "en")
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    DB_NAME = os.path.join(BASE_DIR, 'instance', 'siket_ekub.db')
     
-    @classmethod
-    def set(cls, user_id: int, lang: str):
-        with cls._lock:
-            cls._cache[user_id] = lang
-
-def get_text(user_id: int, key: str, **kwargs) -> str:
-    lang = LangCache.get(user_id)
-    text = TEXTS.get(lang, TEXTS['en']).get(key, key)
-    return text.format(**kwargs) if kwargs else text
+    os.makedirs(os.path.join(BASE_DIR, 'instance'), exist_ok=True)
+    
+    async with aiosqlite.connect(DB_NAME) as db:
+        await db.execute("PRAGMA journal_mode=WAL;")
+        await db.execute("PRAGMA synchronous=NORMAL;")
+        
+        # Users table
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                user_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                telegram_id INTEGER UNIQUE NOT NULL,
+                phone_number TEXT NOT NULL,
+                address TEXT NOT NULL,
+                full_name TEXT,
+                registration_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+                is_active BOOLEAN DEFAULT 1,
+                is_blocked BOOLEAN DEFAULT 0,
+                language TEXT DEFAULT 'en',
+                balance REAL DEFAULT 0.0,
+                total_spent REAL DEFAULT 0.0
+            )
+        """)
+        
+        # Ticket types
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS ticket_types (
+                type_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                description TEXT,
+                total_slots INTEGER NOT NULL DEFAULT 20000,
+                price DECIMAL(10, 2) NOT NULL DEFAULT 3000.00,
+                is_active BOOLEAN DEFAULT 1,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Tickets table - FIXED
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS tickets (
+                ticket_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                type_id INTEGER NOT NULL,
+                ticket_code TEXT NOT NULL UNIQUE,
+                ticket_number INTEGER NOT NULL,
+                status TEXT DEFAULT 'available',
+                user_id INTEGER,
+                telegram_id INTEGER,
+                phone_number TEXT,
+                full_name TEXT,
+                assigned_at DATETIME,
+                refunded_at DATETIME,
+                refund_reason TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Payments table - FIXED with all columns
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS payments (
+                payment_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                telegram_id INTEGER NOT NULL,
+                phone_number TEXT,
+                full_name TEXT,
+                ticket_id INTEGER NOT NULL,
+                ticket_number INTEGER NOT NULL,
+                amount DECIMAL(15,2) DEFAULT 3000,
+                raw_sms TEXT,
+                extracted_ref TEXT,
+                extracted_amount DECIMAL(10, 2),
+                extracted_date TEXT,
+                status TEXT DEFAULT 'pending',
+                verified_by INTEGER,
+                verified_at DATETIME,
+                refunded_at DATETIME,
+                refund_reason TEXT,
+                admin_notes TEXT,
+                is_underpayment BOOLEAN DEFAULT 0,
+                screenshot_data TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Prizes
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS prizes (
+                prize_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                type_id INTEGER NOT NULL,
+                prize_position INTEGER,
+                prize_name TEXT NOT NULL,
+                prize_description TEXT,
+                prize_value DECIMAL(10, 2),
+                is_active BOOLEAN DEFAULT 1,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Refunds
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS refunds (
+                refund_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                telegram_id INTEGER NOT NULL,
+                phone_number TEXT NOT NULL,
+                ticket_id INTEGER NOT NULL,
+                ticket_number INTEGER NOT NULL,
+                payment_id INTEGER NOT NULL,
+                refund_amount DECIMAL(10, 2) NOT NULL,
+                refund_reason TEXT,
+                status TEXT DEFAULT 'pending',
+                processed_by INTEGER,
+                processed_at DATETIME,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Winner history
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS winner_history (
+                winner_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                type_id INTEGER NOT NULL,
+                prize_id INTEGER NOT NULL,
+                ticket_id INTEGER NOT NULL,
+                ticket_number INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                telegram_id INTEGER NOT NULL,
+                phone_number TEXT NOT NULL,
+                winning_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+                claim_status TEXT DEFAULT 'pending',
+                claimed_at DATETIME,
+                notes TEXT
+            )
+        """)
+        
+        # User activity
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS user_activity (
+                activity_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                telegram_id INTEGER NOT NULL,
+                activity_type TEXT NOT NULL,
+                activity_details TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Bot settings
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS bot_settings (
+                setting_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                setting_key TEXT UNIQUE NOT NULL,
+                setting_value TEXT,
+                setting_type TEXT DEFAULT 'string',
+                description TEXT,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Indexes
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_tickets_telegram ON tickets(telegram_id)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status)")
+        
+        # Check and create default data
+        cursor = await db.execute("SELECT type_id FROM ticket_types LIMIT 1")
+        existing = await cursor.fetchone()
+        
+        if not existing:
+            print("🎮 Creating default lottery game...")
+            
+            await db.execute("""
+                INSERT INTO ticket_types (name, description, total_slots, price, is_active) 
+                VALUES (?, ?, ?, ?, ?)
+            """, ("Siket Ekub Main Draw", "Main lottery draw with 10 exciting prizes", 20000, 3000.00, 1))
+            
+            cursor = await db.execute("SELECT last_insert_rowid()")
+            type_id = (await cursor.fetchone())[0]
+            
+            print(f"🎫 Generating 20,000 tickets...")
+            for i in range(1, 20001):
+                await db.execute(
+                    "INSERT INTO tickets (type_id, ticket_code, ticket_number, status) VALUES (?, ?, ?, ?)",
+                    (type_id, f"{type_id}_{i}", i, 'available')
+                )
+                if i % 1000 == 0:
+                    print(f"   Generated {i} tickets...")
+            
+            prizes = [
+                (type_id, 1, 'BWD Leopard 3', 'Brand new BWD Leopard 3 car', 4500000.00),
+                (type_id, 2, 'Hyundai Bayon', 'Brand new Hyundai Bayon car', 3200000.00),
+                (type_id, 3, 'Bole Dema Hop – Shop Space', 'Commercial shop space', 2000000.00),
+                (type_id, 4, '1,000,000 ETB Cash', 'Cash prize', 1000000.00),
+                (type_id, 5, '1,000,000 ETB Cash', 'Cash prize', 1000000.00),
+                (type_id, 6, '1,000,000 ETB Cash', 'Cash prize', 1000000.00),
+                (type_id, 7, '1,000,000 ETB Cash', 'Cash prize', 1000000.00),
+                (type_id, 8, '500,000 ETB Cash', 'Cash prize', 500000.00),
+                (type_id, 9, '300,000 ETB Cash', 'Cash prize', 300000.00),
+                (type_id, 10, '200,000 ETB Cash', 'Cash prize', 200000.00),
+            ]
+            
+            for prize in prizes:
+                await db.execute(
+                    "INSERT INTO prizes (type_id, prize_position, prize_name, prize_description, prize_value) VALUES (?, ?, ?, ?, ?)",
+                    prize
+                )
+            
+            await db.commit()
+            print("✅ Default data created successfully with 20,000 tickets!")
+        
+        print("✅ SQLite Database ready!")
 
 # =====================================================
-# KEYBOARDS
+# BACKUP FUNCTION
 # =====================================================
 
-def choice_menu() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="🤖 Use Telegram")],
-            [KeyboardButton(text="🌐 Open Web")],
-            [KeyboardButton(text="ℹ️ About")],
-        ],
-        resize_keyboard=True
-    )
-
-def user_menu(uid: int) -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="🎯 Buy Ticket"), KeyboardButton(text="🎫 My Tickets")],
-            [KeyboardButton(text="💰 Balance"), KeyboardButton(text="🏆 Prizes")],
-            [KeyboardButton(text="💬 Support"), KeyboardButton(text="🌍 Language")],
-        ],
-        resize_keyboard=True
-    )
-
-def buy_menu(uid: int) -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="🎲 Random Ticket")],
-            [KeyboardButton(text="✏️ Type Number")],
-            [KeyboardButton(text="📦 Choose Block (50 tickets)")],
-            [KeyboardButton(text="🔙 Back")],
-        ],
-        resize_keyboard=True
-    )
-
-def admin_menu(uid: int) -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="🛠️ Admin Panel")],
-            [KeyboardButton(text="✅ Verify Payments"), KeyboardButton(text="👤 Users")],
-            [KeyboardButton(text="🔄 Refund"), KeyboardButton(text="📢 Broadcast")],
-            [KeyboardButton(text="📊 Reports"), KeyboardButton(text="🎯 Buy for User")],
-            [KeyboardButton(text="📝 Manual Ticket"), KeyboardButton(text="🔙 Back to User")],
-        ],
-        resize_keyboard=True
-    )
+async def backup_database():
+    """Create a backup of the database"""
+    try:
+        if DATABASE_URL and POSTGRES_AVAILABLE:
+            import os
+            backup_dir = os.path.join(os.path.dirname(__file__), "backups")
+            os.makedirs(backup_dir, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_path = os.path.join(backup_dir, f"siket_ekub_backup_{timestamp}.sql")
+            print(f"📦 PostgreSQL backup would be saved to: {backup_path}")
+            return True
+        else:
+            import aiosqlite
+            import os
+            BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+            DB_NAME = os.path.join(BASE_DIR, 'instance', 'siket_ekub.db')
+            backup_dir = os.path.join(BASE_DIR, "backups")
+            os.makedirs(backup_dir, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_path = os.path.join(backup_dir, f"siket_ekub_backup_{timestamp}.db")
+            
+            async with aiosqlite.connect(DB_NAME) as src:
+                async with aiosqlite.connect(backup_path) as dst:
+                    await src.backup(dst)
+            
+            print(f"✅ Database backup created: {backup_path}")
+            return True
+    except Exception as e:
+        print(f"❌ Database backup failed: {e}")
+        return False
 
 # =====================================================
-# STATES
-# =====================================================
-class RegState(StatesGroup):
-    name = State()
-    phone = State()
-    address = State()
-
-class BuyState(StatesGroup):
-    block = State()
-    payment = State()
-
-class AdminState(StatesGroup):
-    broadcast_msg = State()
-    buy_user_id = State()
-    buy_ticket_num = State()
-    manual_ticket = State()
-
-# =====================================================
-# DATABASE HELPERS
+# REFUND FUNCTIONS
 # =====================================================
 
-async def get_user(tid: int):
-    return await DatabaseHelper.fetch_one("SELECT * FROM users WHERE telegram_id = $1", tid)
+async def process_refund(payment_id: int, reason: str = "Refund requested") -> dict:
+    """Process a refund for a payment"""
+    try:
+        payment = await DatabaseHelper.fetch_one("""
+            SELECT p.payment_id, p.user_id, p.telegram_id, p.phone_number, 
+                   p.ticket_id, p.ticket_number, p.amount,
+                   t.status as ticket_status
+            FROM payments p
+            LEFT JOIN tickets t ON p.ticket_id = t.ticket_id
+            WHERE p.payment_id = $1 AND p.status = 'approved'
+        """, (payment_id,))
+        
+        if not payment:
+            return {"success": False, "error": "Payment not found or not approved"}
+        
+        payment_id, user_id, telegram_id, phone_number, ticket_id, ticket_number, amount, ticket_status = payment
+        
+        if ticket_status == 'refunded':
+            return {"success": False, "error": "Ticket already refunded"}
+        
+        await DatabaseHelper.execute_transaction([
+            ("UPDATE payments SET status = 'refunded', refunded_at = CURRENT_TIMESTAMP, refund_reason = $1 WHERE payment_id = $2", (reason, payment_id)),
+            ("UPDATE tickets SET status = 'refunded', refunded_at = CURRENT_TIMESTAMP, refund_reason = $1 WHERE ticket_id = $2", (reason, ticket_id)),
+            ("UPDATE users SET balance = COALESCE(balance, 0) + $1 WHERE user_id = $2", (amount, user_id))
+        ])
+        
+        cursor = await DatabaseHelper.execute("""
+            INSERT INTO refunds (user_id, telegram_id, phone_number, ticket_id, ticket_number, 
+                                payment_id, refund_amount, refund_reason, status, processed_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'completed', CURRENT_TIMESTAMP)
+        """, (user_id, telegram_id, phone_number, ticket_id, ticket_number, payment_id, amount, reason))
+        
+        return {
+            "success": True,
+            "refund_id": cursor,
+            "amount": amount,
+            "ticket_number": ticket_number,
+            "message": f"Refund of {amount:,.2f} ETB processed for ticket #{ticket_number}"
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
-async def get_available_ticket():
+# =====================================================
+# HELPER FUNCTIONS
+# =====================================================
+
+async def get_user(telegram_id: int):
+    """Get user by telegram_id"""
     return await DatabaseHelper.fetch_one(
-        "SELECT ticket_id, ticket_number FROM tickets WHERE status = 'available' LIMIT 1"
-    )
-
-async def get_ticket_by_number(num: int):
-    return await DatabaseHelper.fetch_one(
-        "SELECT ticket_id, ticket_number FROM tickets WHERE ticket_number = $1 AND status = 'available'",
-        num
-    )
-
-async def get_tickets_in_block(start: int, end: int):
-    return await DatabaseHelper.fetch(
-        "SELECT ticket_id, ticket_number FROM tickets WHERE ticket_number BETWEEN $1 AND $2 AND status = 'available'",
-        start, end
-    )
-
-async def lock_ticket(ticket_id: int, user_id: int, telegram_id: int, phone: str, name: str):
-    return await DatabaseHelper.execute(
-        "UPDATE tickets SET status = 'pending', user_id = $1, telegram_id = $2, phone_number = $3, full_name = $4 WHERE ticket_id = $5 AND status = 'available'",
-        user_id, telegram_id, phone, name, ticket_id
-    )
-
-async def assign_ticket(ticket_id: int, user_id: int, telegram_id: int, phone: str, name: str):
-    return await DatabaseHelper.execute(
-        "UPDATE tickets SET status = 'sold', user_id = $1, telegram_id = $2, phone_number = $3, full_name = $4, assigned_at = CURRENT_TIMESTAMP WHERE ticket_id = $5 AND status = 'pending'",
-        user_id, telegram_id, phone, name, ticket_id
+        "SELECT * FROM users WHERE telegram_id = $1",
+        (telegram_id,)
     )
 
 async def get_user_tickets(telegram_id: int):
-    return await DatabaseHelper.fetch(
-        "SELECT ticket_number, assigned_at, status FROM tickets WHERE telegram_id = $1 ORDER BY ticket_number",
-        telegram_id
-    )
-
-async def get_all_users():
-    return await DatabaseHelper.fetch(
-        "SELECT user_id, telegram_id, full_name, phone_number, address, balance, total_spent, created_at FROM users ORDER BY created_at DESC"
-    )
+    """Get user tickets"""
+    return await DatabaseHelper.fetch("""
+        SELECT t.ticket_id, t.ticket_code, t.ticket_number, tt.name, t.status, t.assigned_at
+        FROM tickets t
+        JOIN ticket_types tt ON t.type_id = tt.type_id
+        WHERE t.telegram_id = $1
+        ORDER BY t.assigned_at DESC
+    """, (telegram_id,))
 
 async def get_pending_payments():
-    return await DatabaseHelper.fetch(
-        "SELECT payment_id, telegram_id, ticket_number, full_name, phone_number, created_at FROM payments WHERE status = 'pending' ORDER BY created_at DESC"
-    )
+    """Get all pending payments with full_name and phone_number"""
+    return await DatabaseHelper.fetch("""
+        SELECT p.payment_id, p.telegram_id, p.phone_number, p.full_name, p.ticket_number,
+               p.extracted_ref, p.amount, p.created_at, u.full_name as user_name,
+               p.is_underpayment, p.admin_notes, p.screenshot_data
+        FROM payments p
+        JOIN users u ON p.user_id = u.user_id
+        WHERE p.status = 'pending'
+        ORDER BY p.created_at ASC
+    """)
 
-async def get_user_ticket_count(telegram_id: int):
-    result = await DatabaseHelper.fetch_one(
-        "SELECT COUNT(*) FROM tickets WHERE telegram_id = $1 AND status = 'sold'",
-        telegram_id
-    )
-    return result[0] if result else 0
-
-# =====================================================
-# START COMMAND
-# =====================================================
-
-@router.message(Command("start"))
-async def start_cmd(message: Message, state: FSMContext):
-    uid = message.from_user.id
-    await state.clear()
-    
-    user = await get_user(uid)
-    
-    if user:
-        lang = user[8] if len(user) > 8 else "en"
-        LangCache.set(uid, lang)
-        await message.answer(
-            f"{get_text(uid, 'welcome')}\n\n{get_text(uid, 'choose_interface')}",
-            reply_markup=choice_menu(),
-            parse_mode="Markdown"
-        )
-        return
-    
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🇬🇧 English", callback_data="reg_lang_en")],
-        [InlineKeyboardButton(text="🇪🇹 አማርኛ", callback_data="reg_lang_am")],
-    ])
-    
-    await message.answer(
-        "🌍 **Welcome!**\n\nPlease choose your language to register:",
-        reply_markup=kb,
-        parse_mode="Markdown"
-    )
-
-# =====================================================
-# REGISTRATION
-# =====================================================
-
-@router.callback_query(F.data.startswith("reg_lang_"))
-async def reg_lang(callback: CallbackQuery, state: FSMContext):
-    uid = callback.from_user.id
-    lang = callback.data.split("_")[2]
-    LangCache.set(uid, lang)
-    await callback.message.delete()
-    
-    await callback.message.answer(
-        get_text(uid, "reg_name"),
-        reply_markup=ReplyKeyboardRemove()
-    )
-    await state.set_state(RegState.name)
-    await callback.answer()
-
-@router.message(RegState.name, F.text)
-async def reg_name(message: Message, state: FSMContext):
-    uid = message.from_user.id
-    await state.update_data(name=message.text)
-    
-    kb = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=get_text(uid, "reg_phone"), request_contact=True)]],
-        resize_keyboard=True, one_time_keyboard=True
-    )
-    await message.answer(get_text(uid, "reg_phone"), reply_markup=kb)
-    await state.set_state(RegState.phone)
-
-@router.message(RegState.phone, F.contact)
-async def reg_phone(message: Message, state: FSMContext):
-    uid = message.from_user.id
-    await state.update_data(phone=message.contact.phone_number)
-    await message.answer(get_text(uid, "reg_address"), reply_markup=ReplyKeyboardRemove())
-    await state.set_state(RegState.address)
-
-@router.message(RegState.address, F.text)
-async def reg_address(message: Message, state: FSMContext):
-    uid = message.from_user.id
-    data = await state.get_data()
-    name = data.get("name")
-    phone = data.get("phone")
-    address = message.text
-    lang = LangCache.get(uid)
-    
-    await DatabaseHelper.execute(
-        "INSERT INTO users (telegram_id, full_name, phone_number, address, language) VALUES ($1, $2, $3, $4, $5)",
-        uid, name, phone, address, lang
-    )
-    await state.clear()
-    await message.answer(
-        f"✅ {get_text(uid, 'registered')}\n\n{get_text(uid, 'choose_interface')}",
-        reply_markup=choice_menu(),
-        parse_mode="Markdown"
-    )
-
-# =====================================================
-# CHOICE MENU HANDLERS
-# =====================================================
-
-@router.message(F.text == "🤖 Use Telegram")
-async def use_telegram(message: Message):
-    uid = message.from_user.id
-    user = await get_user(uid)
-    if not user:
-        await message.answer(get_text(uid, "registration_required"))
-        return
-    lang = user[8] if len(user) > 8 else "en"
-    LangCache.set(uid, lang)
-    await message.answer(get_text(uid, "menu"), reply_markup=user_menu(uid))
-
-@router.message(F.text == "🌐 Open Web")
-async def open_web(message: Message):
-    uid = message.from_user.id
-    user = await get_user(uid)
-    if not user:
-        await message.answer(get_text(uid, "registration_required"))
-        return
-    
-    phone = user[3] or "N/A"
-    balance = user[5] or 0
-    name = user[2] or str(uid)
-    tickets = await get_user_tickets(uid)
-    spent = user[6] or 0
-    
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🌐 Open Web Interface", web_app=WebAppInfo(url=f"{WEBAPP_URL}?telegram_id={uid}"))]
-    ])
-    
-    await message.answer(
-        f"🌐 **Web Interface**\n\n"
-        f"👤 User: {name}\n"
-        f"📱 Phone: {phone}\n"
-        f"💰 Balance: {balance} ETB\n"
-        f"🎫 Tickets: {len(tickets)}\n"
-        f"💸 Total Spent: {spent} ETB\n\n"
-        f"Click below to open:",
-        reply_markup=kb,
-        parse_mode="Markdown"
-    )
-
-@router.message(F.text == "ℹ️ About")
-async def about(message: Message):
-    uid = message.from_user.id
-    await message.answer(
-        "🎰 **Siket Ekub**\n\n"
-        "💰 Price: 3,000 ETB\n\n"
-        "🏆 **10 PRIZES:**\n"
-        "1st: BWD Leopard 3 (8,000,000 ETB)\n"
-        "2nd: Hyundai Bayon (5,000,000 ETB)\n"
-        "3rd: Shop Space (4,000,000 ETB)\n"
-        "4th: 1,000,000 ETB\n"
-        "5th: 1,000,000 ETB\n"
-        "6th: 1,000,000 ETB\n"
-        "7th: 1,000,000 ETB\n"
-        "8th: 500,000 ETB\n"
-        "9th: 300,000 ETB\n"
-        "10th: 200,000 ETB\n\n"
-        f"📞 Support: {SUPPORT_CHANNEL_LINK}\n"
-        f"🎟️ Tickets: {TICKET_CHANNEL_LINK}\n\n"
-        "📌 Register > Pick Ticket > Pay > Win!",
-        reply_markup=choice_menu(),
-        parse_mode="Markdown"
-    )
-
-# =====================================================
-# LANGUAGE TOGGLE
-# =====================================================
-
-@router.message(F.text == "🌍 Language")
-async def lang_toggle(message: Message):
-    uid = message.from_user.id
-    user = await get_user(uid)
-    if not user:
-        await message.answer(get_text(uid, "registration_required"))
-        return
-    
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🇬🇧 English", callback_data="toggle_lang_en")],
-        [InlineKeyboardButton(text="🇪🇹 አማርኛ", callback_data="toggle_lang_am")],
-    ])
-    await message.answer(get_text(uid, "choose_lang"), reply_markup=kb)
-
-@router.callback_query(F.data.startswith("toggle_lang_"))
-async def toggle_lang(callback: CallbackQuery):
-    uid = callback.from_user.id
-    lang = callback.data.split("_")[2]
-    await DatabaseHelper.execute("UPDATE users SET language = $1 WHERE telegram_id = $2", lang, uid)
-    LangCache.set(uid, lang)
-    await callback.message.delete()
-    await callback.message.answer(get_text(uid, "lang_changed"), reply_markup=user_menu(uid))
-    await callback.answer()
-
-# =====================================================
-# USER COMMANDS
-# =====================================================
-
-@router.message(F.text == "🎯 Buy Ticket")
-async def buy_ticket(message: Message, state: FSMContext):
-    uid = message.from_user.id
-    
-    user = await get_user(uid)
-    if not user:
-        await message.answer(get_text(uid, "registration_required"))
-        return
-    
-    count = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM tickets WHERE status = 'available'")
-    if not count or count[0] == 0:
-        await message.answer(get_text(uid, "no_tickets"), reply_markup=user_menu(uid))
-        return
-    
-    await message.answer(
-        get_text(uid, "pick_ticket"),
-        reply_markup=buy_menu(uid)
-    )
-
-# =====================================================
-# BUY TICKET METHODS
-# =====================================================
-
-@router.message(F.text == "🎲 Random Ticket")
-async def random_ticket(message: Message, state: FSMContext):
-    uid = message.from_user.id
-    
-    user = await get_user(uid)
-    if not user:
-        await message.answer(get_text(uid, "registration_required"))
-        return
-    
-    ticket = await get_available_ticket()
-    if not ticket:
-        await message.answer(get_text(uid, "no_tickets"), reply_markup=buy_menu(uid))
-        return
-    
-    ticket_id, ticket_num = ticket
-    await state.update_data(ticket_id=ticket_id, ticket_num=ticket_num)
-    
-    kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="🔙 Back")]], resize_keyboard=True)
-    await message.answer(f"🎫 Ticket #{ticket_num}\n\n{get_text(uid, 'pay')}", reply_markup=kb)
-    await state.set_state(BuyState.payment)
-
-@router.message(F.text == "✏️ Type Number")
-async def type_number(message: Message, state: FSMContext):
-    uid = message.from_user.id
-    
-    user = await get_user(uid)
-    if not user:
-        await message.answer(get_text(uid, "registration_required"))
-        return
-    
-    kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="🔙 Back")]], resize_keyboard=True)
-    await message.answer(get_text(uid, "enter_number"), reply_markup=kb)
-    await state.set_state(BuyState.block)
-
-@router.message(F.text == "📦 Choose Block (50 tickets)")
-async def choose_block(message: Message, state: FSMContext):
-    uid = message.from_user.id
-    
-    user = await get_user(uid)
-    if not user:
-        await message.answer(get_text(uid, "registration_required"))
-        return
-    
-    kb_rows = []
-    row = []
-    for i in range(1, 20001, 50):
-        start = i
-        end = min(i + 49, 20000)
-        row.append(KeyboardButton(text=f"{start}-{end}"))
-        if len(row) == 4:
-            kb_rows.append(row)
-            row = []
-    if row:
-        kb_rows.append(row)
-    kb_rows.append([KeyboardButton(text="🔙 Back")])
-    
-    await message.answer(
-        get_text(uid, "select_block"),
-        reply_markup=ReplyKeyboardMarkup(keyboard=kb_rows, resize_keyboard=True)
-    )
-    await state.set_state(BuyState.block)
-
-@router.message(BuyState.block, F.text)
-async def process_block_selection(message: Message, state: FSMContext):
-    uid = message.from_user.id
-    
-    if message.text == "🔙 Back":
-        await message.answer(get_text(uid, "pick_ticket"), reply_markup=buy_menu(uid))
-        await state.clear()
-        return
-    
-    if '-' in message.text:
-        try:
-            start, end = map(int, message.text.split('-'))
-            
-            if start < 1 or end > 20000 or start > end:
-                await message.answer(get_text(uid, "invalid_number"))
-                return
-            
-            tickets = await get_tickets_in_block(start, end)
-            
-            if not tickets:
-                kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="🔙 Back")]], resize_keyboard=True)
-                await message.answer("❌ No tickets available in this block.", reply_markup=kb)
-                return
-            
-            kb_rows = []
-            row = []
-            for ticket_id, ticket_num in tickets[:50]:
-                row.append(KeyboardButton(text=str(ticket_num)))
-                if len(row) == 5:
-                    kb_rows.append(row)
-                    row = []
-            if row:
-                kb_rows.append(row)
-            if len(tickets) > 50:
-                kb_rows.append([KeyboardButton(text=f"📊 {len(tickets)-50} more tickets")])
-            kb_rows.append([KeyboardButton(text="🔙 Back")])
-            
-            await message.answer(
-                f"🎫 Available tickets in {start}-{end}:\n({len(tickets)} tickets)\n\nSelect a ticket number:",
-                reply_markup=ReplyKeyboardMarkup(keyboard=kb_rows, resize_keyboard=True)
-            )
-            return
-            
-        except ValueError:
-            await message.answer(get_text(uid, "invalid_number"))
-            return
-    
-    try:
-        ticket_num = int(message.text.strip())
-        if ticket_num < 1 or ticket_num > 20000:
-            raise ValueError
-    except:
-        await message.answer(get_text(uid, "invalid_number"))
-        return
-    
-    ticket = await get_ticket_by_number(ticket_num)
-    if not ticket:
-        await message.answer(get_text(uid, "ticket_not_found"))
-        return
-    
-    await state.update_data(ticket_id=ticket[0], ticket_num=ticket_num)
-    
-    kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="🔙 Back")]], resize_keyboard=True)
-    await message.answer(f"🎫 Ticket #{ticket_num}\n\n{get_text(uid, 'pay')}", reply_markup=kb)
-    await state.set_state(BuyState.payment)
-
-# =====================================================
-# PAYMENT PROCESSING - FIXED
-# =====================================================
-
-@router.message(BuyState.payment, F.photo | F.text)
-async def process_payment(message: Message, state: FSMContext):
-    uid = message.from_user.id
-    
-    if message.text == "🔙 Back":
-        await message.answer(get_text(uid, "pick_ticket"), reply_markup=buy_menu(uid))
-        await state.clear()
-        return
-    
-    data = await state.get_data()
-    ticket_id = data.get("ticket_id")
-    ticket_num = data.get("ticket_num")
-    
-    if not ticket_id:
-        await message.answer("❌ No ticket selected.", reply_markup=user_menu(uid))
-        await state.clear()
-        return
-    
-    user = await get_user(uid)
-    if not user:
-        await message.answer(get_text(uid, "registration_required"))
-        return
-    
-    user_id = user[0]
-    phone = user[3] or "N/A"
-    name = user[2] or "User"
-    
-    # Lock the ticket
-    locked = await lock_ticket(ticket_id, user_id, uid, phone, name)
-    
-    if "UPDATE 0" in str(locked):
-        await message.answer("❌ Ticket just got taken! Please try another.", reply_markup=buy_menu(uid))
-        await state.clear()
-        return
-    
-    screenshot = ""
-    if message.photo:
-        photo = message.photo[-1]
-        file = await telegram_bot.get_file(photo.file_id)
-        downloaded = await telegram_bot.download_file(file.file_path)
-        screenshot = base64.b64encode(downloaded.read()).decode('utf-8')
-    
-    # Insert payment with all columns
-    result = await DatabaseHelper.execute(
-        "INSERT INTO payments (user_id, telegram_id, phone_number, full_name, ticket_id, ticket_number, amount, status, screenshot_data) VALUES ($1, $2, $3, $4, $5, $6, 3000, 'pending', $7) RETURNING payment_id",
-        user_id, uid, phone, name, ticket_id, ticket_num, screenshot
-    )
-    payment_id = result[0] if result else None
-    
-    await state.clear()
-    await message.answer(get_text(uid, "pay_submitted"), reply_markup=user_menu(uid))
-    
-    # Notify admins
-    for admin in ADMIN_IDS:
-        try:
-            msg = f"🔔 New Payment\n🎫 Ticket #{ticket_num}\n👤 {name}\n📱 {phone}\n🆔 {payment_id}"
-            if screenshot:
-                img = base64.b64decode(screenshot)
-                await telegram_bot.send_photo(admin, BufferedInputFile(img, filename="pay.jpg"), caption=msg, reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="✅ Approve", callback_data=f"approve_{payment_id}")],
-                    [InlineKeyboardButton(text="❌ Reject", callback_data=f"reject_{payment_id}")]
-                ]))
-            else:
-                await telegram_bot.send_message(admin, msg, reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="✅ Approve", callback_data=f"approve_{payment_id}")],
-                    [InlineKeyboardButton(text="❌ Reject", callback_data=f"reject_{payment_id}")]
-                ]))
-        except Exception as e:
-            logger.error(f"Error notifying admin: {e}")
-
-# =====================================================
-# APPROVE/REJECT PAYMENTS
-# =====================================================
-
-@router.callback_query(F.data.startswith("approve_"))
-async def approve_pay(callback: CallbackQuery):
-    uid = callback.from_user.id
-    if uid not in ADMIN_IDS:
-        await callback.answer("⛔ Unauthorized!", show_alert=True)
-        return
-    
-    payment_id = int(callback.data.split("_")[1])
-    payment = await DatabaseHelper.fetch_one(
-        "SELECT telegram_id, ticket_id, ticket_number, full_name, phone_number FROM payments WHERE payment_id = $1 AND status = 'pending'",
-        payment_id
-    )
-    if not payment:
-        await callback.answer("❌ Payment not found!", show_alert=True)
-        return
-    
-    tg_id, ticket_id, ticket_num, name, phone = payment
-    
-    user = await get_user(tg_id)
-    if not user:
-        await callback.answer("❌ User not found!", show_alert=True)
-        return
-    
-    user_id = user[0]
-    
-    assigned = await assign_ticket(ticket_id, user_id, tg_id, phone, name)
-    
-    if "UPDATE 0" in str(assigned):
-        await DatabaseHelper.execute("UPDATE payments SET status = 'rejected', admin_notes = 'Ticket no longer pending' WHERE payment_id = $1", payment_id)
-        await callback.message.edit_text(f"❌ Ticket #{ticket_num} is no longer available!")
-        await callback.answer()
-        return
-    
-    await DatabaseHelper.execute_transaction([
-        ("UPDATE payments SET status = 'approved', verified_by = $1, verified_at = CURRENT_TIMESTAMP WHERE payment_id = $2", uid, payment_id),
-        ("UPDATE users SET balance = COALESCE(balance, 0) + 3000, total_spent = COALESCE(total_spent, 0) + 3000 WHERE telegram_id = $1", tg_id)
-    ])
-    
-    try:
-        await telegram_bot.send_message(
-            TICKET_CHANNEL_ID,
-            f"✅ Ticket #{ticket_num}\n👤 {name}\n📱 {phone}\n💰 3,000 ETB\n📅 {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-        )
-    except:
-        pass
-    
-    try:
-        await telegram_bot.send_message(tg_id, get_text(tg_id, "pay_approved", ticket=ticket_num))
-    except:
-        pass
-    
-    await callback.message.edit_text(f"✅ Payment #{payment_id} approved!\n🎫 Ticket #{ticket_num}")
-    await callback.answer()
-
-@router.callback_query(F.data.startswith("reject_"))
-async def reject_pay(callback: CallbackQuery):
-    uid = callback.from_user.id
-    if uid not in ADMIN_IDS:
-        await callback.answer("⛔ Unauthorized!", show_alert=True)
-        return
-    
-    payment_id = int(callback.data.split("_")[1])
-    payment = await DatabaseHelper.fetch_one(
-        "SELECT telegram_id, ticket_id, ticket_number FROM payments WHERE payment_id = $1 AND status = 'pending'",
-        payment_id
-    )
-    if payment:
-        await DatabaseHelper.execute("UPDATE tickets SET status = 'available', user_id = NULL, telegram_id = NULL, phone_number = NULL, full_name = NULL WHERE ticket_id = $1", payment[1])
-        await DatabaseHelper.execute("UPDATE payments SET status = 'rejected', verified_by = $1, verified_at = CURRENT_TIMESTAMP WHERE payment_id = $2", uid, payment_id)
-        try:
-            await telegram_bot.send_message(payment[0], get_text(payment[0], "pay_rejected"))
-        except:
-            pass
-    
-    await callback.message.edit_text(f"❌ Payment #{payment_id} rejected.")
-    await callback.answer()
-
-# =====================================================
-# BACK BUTTON
-# =====================================================
-
-@router.message(F.text == "🔙 Back")
-async def go_back(message: Message, state: FSMContext):
-    uid = message.from_user.id
-    await state.clear()
-    user = await get_user(uid)
-    if user:
-        lang = user[8] if len(user) > 8 else "en"
-        LangCache.set(uid, lang)
-    await message.answer(get_text(uid, "menu"), reply_markup=user_menu(uid))
-
-@router.message(F.text == "🔙 Back to User")
-async def back_to_user(message: Message):
-    uid = message.from_user.id
-    user = await get_user(uid)
-    if user:
-        lang = user[8] if len(user) > 8 else "en"
-        LangCache.set(uid, lang)
-    await message.answer(get_text(uid, "menu"), reply_markup=user_menu(uid))
-
-# =====================================================
-# USER COMMANDS
-# =====================================================
-
-@router.message(F.text == "🎫 My Tickets")
-async def my_tickets_cmd(message: Message):
-    uid = message.from_user.id
-    user = await get_user(uid)
-    if not user:
-        await message.answer(get_text(uid, "registration_required"))
-        return
-    
-    tickets = await get_user_tickets(uid)
-    if not tickets:
-        await message.answer(get_text(uid, "no_tickets_owned"), reply_markup=user_menu(uid))
-        return
-    
-    total = len(tickets)
-    sold = sum(1 for t in tickets if t[2] == 'sold')
-    pending = sum(1 for t in tickets if t[2] == 'pending')
-    
-    text = get_text(uid, "your_tickets", count=total)
-    text += f"📊 Sold: {sold}, Pending: {pending}\n\n"
-    
-    for ticket in tickets[:20]:
-        num, date, status = ticket
-        status_icon = "✅" if status == "sold" else "⏳"
-        text += f"{status_icon} #{num} - {date[:10] if date else 'N/A'}\n"
-    
-    if len(tickets) > 20:
-        text += f"\n... and {len(tickets)-20} more"
-    
-    await message.answer(text, reply_markup=user_menu(uid))
-
-@router.message(F.text == "💰 Balance")
-async def balance_cmd(message: Message):
-    uid = message.from_user.id
-    user = await get_user(uid)
-    if not user:
-        await message.answer(get_text(uid, "registration_required"))
-        return
-    
-    balance = user[5] if len(user) > 5 else 0
-    spent = user[6] if len(user) > 6 else 0
-    
-    try:
-        balance = float(balance) if balance else 0
-    except:
-        balance = 0
-    
-    try:
-        spent = float(spent) if spent else 0
-    except:
-        spent = 0
-    
-    tickets = await get_user_ticket_count(uid)
-    pending = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM payments WHERE telegram_id = $1 AND status = 'pending'", uid)
-    pending_count = pending[0] if pending else 0
-    
-    text = f"💰 Balance: {balance:.2f} ETB\n🎫 Tickets: {tickets}\n💸 Total Spent: {spent:.2f} ETB"
-    if pending_count > 0:
-        text += f"\n\n⏳ Pending Payments: {pending_count}"
-    
-    await message.answer(text, reply_markup=user_menu(uid))
-
-@router.message(F.text == "🏆 Prizes")
-async def prizes_cmd(message: Message):
-    uid = message.from_user.id
-    await message.answer(get_text(uid, "prize_list"), reply_markup=user_menu(uid))
-
-@router.message(F.text == "💬 Support")
-async def support_cmd(message: Message):
-    uid = message.from_user.id
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📞 Support", url=SUPPORT_CHANNEL_LINK)],
-        [InlineKeyboardButton(text="🎟️ Tickets", url=TICKET_CHANNEL_LINK)],
-    ])
-    await message.answer(get_text(uid, "support_info", channel=SUPPORT_CHANNEL_LINK), reply_markup=kb)
-
-# =====================================================
-# ADMIN COMMANDS
-# =====================================================
-
-@router.message(F.text == "🛠️ Admin Panel")
-@router.message(Command("admin"))
-async def admin_cmd(message: Message):
-    uid = message.from_user.id
-    if uid not in ADMIN_IDS:
-        await message.answer("⛔ Unauthorized!", reply_markup=user_menu(uid))
-        return
-    await message.answer("🛠️ Admin Panel - Choose an option:", reply_markup=admin_menu(uid))
-
-@router.message(F.text == "✅ Verify Payments")
-async def admin_verify(message: Message):
-    uid = message.from_user.id
-    if uid not in ADMIN_IDS:
-        await message.answer("⛔ Unauthorized!")
-        return
-    
-    payments = await get_pending_payments()
-    if not payments:
-        await message.answer("📭 No pending payments.", reply_markup=admin_menu(uid))
-        return
-    
-    text = f"⏳ Pending Payments ({len(payments)}):\n\n"
-    for p in payments[:10]:
-        text += f"🆔 {p[0]} | #{p[2]} | {p[3]} | {p[4]}\n"
-    
-    kb = InlineKeyboardMarkup(inline_keyboard=[])
-    for p in payments[:10]:
-        kb.inline_keyboard.append([
-            InlineKeyboardButton(text=f"View #{p[0]}", callback_data=f"view_pay_{p[0]}")
-        ])
-    kb.inline_keyboard.append([InlineKeyboardButton(text="🔙 Back", callback_data="admin_back")])
-    
-    await message.answer(text, reply_markup=kb)
-
-@router.callback_query(F.data.startswith("view_pay_"))
-async def view_payment(callback: CallbackQuery):
-    uid = callback.from_user.id
-    if uid not in ADMIN_IDS:
-        await callback.answer("⛔ Unauthorized!", show_alert=True)
-        return
-    
-    payment_id = int(callback.data.split("_")[2])
-    payment = await DatabaseHelper.fetch_one(
-        "SELECT payment_id, telegram_id, ticket_number, full_name, phone_number, screenshot_data, created_at FROM payments WHERE payment_id = $1",
-        payment_id
-    )
-    if not payment:
-        await callback.answer("❌ Not found!", show_alert=True)
-        return
-    
-    _, tg_id, ticket_num, name, phone, screenshot, created = payment
-    
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Approve", callback_data=f"approve_{payment_id}")],
-        [InlineKeyboardButton(text="❌ Reject", callback_data=f"reject_{payment_id}")],
-        [InlineKeyboardButton(text="🔙 Back", callback_data="admin_back")]
-    ])
-    
-    msg = f"🔍 Payment #{payment_id}\n🎫 Ticket: #{ticket_num}\n👤 {name}\n📱 {phone}\n📅 {created}"
-    
-    if screenshot:
-        try:
-            img = base64.b64decode(screenshot)
-            await callback.message.answer_photo(BufferedInputFile(img, filename="payment.jpg"), caption=msg, reply_markup=kb)
-            await callback.message.delete()
-        except:
-            await callback.message.edit_text(msg + "\n\n📸 Screenshot attached", reply_markup=kb)
-    else:
-        await callback.message.edit_text(msg, reply_markup=kb)
-    await callback.answer()
-
-@router.callback_query(F.data == "admin_back")
-async def admin_back(callback: CallbackQuery):
-    uid = callback.from_user.id
-    await callback.message.delete()
-    await callback.message.answer("🛠️ Admin Panel - Choose an option:", reply_markup=admin_menu(uid))
-    await callback.answer()
-
-@router.message(F.text == "👤 Users")
-async def admin_users(message: Message):
-    uid = message.from_user.id
-    if uid not in ADMIN_IDS:
-        return
-    
-    users = await get_all_users()
-    if not users:
-        await message.answer(get_text(uid, "no_users"), reply_markup=admin_menu(uid))
-        return
-    
-    text = "👤 **All Users:**\n\n"
-    for u in users[:20]:
-        user_id, tg_id, name, phone, address, balance, spent, created = u
-        text += f"🆔 {tg_id}\n👤 {name or 'N/A'}\n📱 {phone or 'N/A'}\n💰 {balance or 0} ETB\n💸 {spent or 0} ETB\n📅 {created[:10]}\n\n"
-    
-    if len(users) > 20:
-        text += f"... and {len(users)-20} more"
-    
-    await message.answer(text, reply_markup=admin_menu(uid), parse_mode="Markdown")
-
-@router.message(F.text == "🔄 Refund")
-async def admin_refund(message: Message):
-    uid = message.from_user.id
-    if uid not in ADMIN_IDS:
-        return
-    
-    users = await DatabaseHelper.fetch(
-        "SELECT user_id, telegram_id, full_name, balance FROM users WHERE balance > 0 ORDER BY balance DESC"
-    )
-    if not users:
-        await message.answer(get_text(uid, "no_refund"), reply_markup=admin_menu(uid))
-        return
-    
-    kb = InlineKeyboardMarkup(inline_keyboard=[])
-    for u in users[:10]:
-        kb.inline_keyboard.append([
-            InlineKeyboardButton(text=f"{u[2] or u[1]} - {u[3]:,.0f} ETB", callback_data=f"refund_user_{u[0]}")
-        ])
-    kb.inline_keyboard.append([InlineKeyboardButton(text="🔄 Process All", callback_data="refund_all")])
-    kb.inline_keyboard.append([InlineKeyboardButton(text="🔙 Back", callback_data="admin_back")])
-    
-    await message.answer("🔄 Select user to refund:", reply_markup=kb)
-
-@router.callback_query(F.data.startswith("refund_user_"))
-async def refund_user(callback: CallbackQuery):
-    uid = callback.from_user.id
-    if uid not in ADMIN_IDS:
-        await callback.answer("⛔ Unauthorized!", show_alert=True)
-        return
-    
-    user_id = int(callback.data.split("_")[2])
-    user = await DatabaseHelper.fetch_one("SELECT telegram_id, full_name, balance FROM users WHERE user_id = $1", user_id)
-    if not user or user[2] <= 0:
-        await callback.answer("❌ No balance!", show_alert=True)
-        return
-    
-    tg_id, name, balance = user
-    
-    await DatabaseHelper.execute_transaction([
-        ("INSERT INTO refunds (user_id, telegram_id, refund_amount, refund_reason, status, processed_by, processed_at) VALUES ($1, $2, $3, 'Admin refund', 'completed', $4, CURRENT_TIMESTAMP)", user_id, tg_id, balance, uid),
-        ("UPDATE users SET balance = 0 WHERE user_id = $1", user_id)
-    ])
-    
-    try:
-        await telegram_bot.send_message(tg_id, get_text(tg_id, "refund_complete", amount=balance))
-    except:
-        pass
-    
-    await callback.message.edit_text(f"✅ Refunded {balance:,.0f} ETB to {name}", reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔙 Back", callback_data="admin_back")]
-    ]))
-    await callback.answer()
-
-@router.callback_query(F.data == "refund_all")
-async def refund_all(callback: CallbackQuery):
-    uid = callback.from_user.id
-    if uid not in ADMIN_IDS:
-        await callback.answer("⛔ Unauthorized!", show_alert=True)
-        return
-    
-    users = await DatabaseHelper.fetch("SELECT user_id, telegram_id, balance FROM users WHERE balance > 0")
-    if not users:
-        await callback.answer("No users with balance!", show_alert=True)
-        return
-    
-    total = 0
-    for user_id, tg_id, balance in users:
-        await DatabaseHelper.execute_transaction([
-            ("INSERT INTO refunds (user_id, telegram_id, refund_amount, refund_reason, status, processed_by, processed_at) VALUES ($1, $2, $3, 'Bulk refund', 'completed', $4, CURRENT_TIMESTAMP)", user_id, tg_id, balance, uid),
-            ("UPDATE users SET balance = 0 WHERE user_id = $1", user_id)
-        ])
-        total += balance
-        try:
-            await telegram_bot.send_message(tg_id, get_text(tg_id, "refund_complete", amount=balance))
-        except:
-            pass
-        await asyncio.sleep(0.05)
-    
-    await callback.message.edit_text(get_text(uid, "refund_all", total=total, count=len(users)), reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔙 Back", callback_data="admin_back")]
-    ]))
-    await callback.answer()
-
-@router.message(F.text == "📢 Broadcast")
-async def admin_broadcast(message: Message, state: FSMContext):
-    uid = message.from_user.id
-    if uid not in ADMIN_IDS:
-        return
-    
-    await message.answer("📢 Enter message to broadcast:", reply_markup=ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="🔙 Back to User")]], resize_keyboard=True
-    ))
-    await state.set_state(AdminState.broadcast_msg)
-
-@router.message(AdminState.broadcast_msg, F.text)
-async def send_broadcast(message: Message, state: FSMContext):
-    uid = message.from_user.id
-    if uid not in ADMIN_IDS:
-        return
-    
-    if message.text == "🔙 Back to User":
-        await back_to_user(message)
-        await state.clear()
-        return
-    
-    users = await DatabaseHelper.fetch("SELECT telegram_id FROM users")
-    if not users:
-        await message.answer("❌ No users.", reply_markup=admin_menu(uid))
-        await state.clear()
-        return
-    
-    msg = message.text
-    sent = 0
-    for user in users:
-        try:
-            await telegram_bot.send_message(user[0], f"📢 {msg}")
-            sent += 1
-            await asyncio.sleep(0.05)
-        except:
-            pass
-    
-    await state.clear()
-    await message.answer(get_text(uid, "broadcast_sent", sent=sent, total=len(users)), reply_markup=admin_menu(uid))
-
-@router.message(F.text == "📊 Reports")
-async def admin_reports(message: Message):
-    uid = message.from_user.id
-    if uid not in ADMIN_IDS:
-        return
-    
-    total = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM tickets")
-    available = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM tickets WHERE status = 'available'")
-    pending_tickets = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM tickets WHERE status = 'pending'")
-    sold = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM tickets WHERE status = 'sold'")
-    total_users = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM users")
-    total_revenue = await DatabaseHelper.fetch_one("SELECT COALESCE(SUM(total_spent), 0) FROM users")
-    pending = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM payments WHERE status = 'pending'")
-    approved = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM payments WHERE status = 'approved'")
-    rejected = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM payments WHERE status = 'rejected'")
-    
-    text = (
-        f"📊 **System Reports**\n\n"
-        f"👤 Users: {total_users[0] or 0}\n"
-        f"📊 Total Tickets: {total[0] or 0}\n"
-        f"🎫 Available: {available[0] or 0}\n"
-        f"⏳ Pending: {pending_tickets[0] or 0}\n"
-        f"💰 Sold: {sold[0] or 0}\n"
-        f"💵 Revenue: {total_revenue[0] or 0:,.0f} ETB\n\n"
-        f"📋 Payments:\n"
-        f"⏳ Pending: {pending[0] or 0}\n"
-        f"✅ Approved: {approved[0] or 0}\n"
-        f"❌ Rejected: {rejected[0] or 0}"
-    )
-    
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📥 Download Report", callback_data="download_report")],
-        [InlineKeyboardButton(text="🔙 Back", callback_data="admin_back")]
-    ])
-    
-    await message.answer(text, reply_markup=kb, parse_mode="Markdown")
-
-@router.callback_query(F.data == "download_report")
-async def download_report(callback: CallbackQuery):
-    uid = callback.from_user.id
-    if uid not in ADMIN_IDS:
-        await callback.answer("⛔ Unauthorized!", show_alert=True)
-        return
-    
-    tickets = await DatabaseHelper.fetch(
-        "SELECT ticket_number, telegram_id, full_name, phone_number, assigned_at, status FROM tickets WHERE status != 'available' ORDER BY assigned_at DESC"
-    )
-    
-    csv = "Ticket,User ID,Name,Phone,Date,Status\n"
-    for t in tickets:
-        num, tg_id, name, phone, date, status = t
-        csv += f"{num},{tg_id or 'N/A'},{name or 'N/A'},{phone or 'N/A'},{date or 'N/A'},{status}\n"
-    
-    file = io.BytesIO(csv.encode('utf-8'))
-    await callback.message.answer_document(BufferedInputFile(file.getvalue(), filename="tickets_report.csv"), caption="📊 Tickets Report")
-    await callback.answer()
-
-@router.message(F.text == "🎯 Buy for User")
-async def admin_buy_user(message: Message, state: FSMContext):
-    uid = message.from_user.id
-    if uid not in ADMIN_IDS:
-        return
-    
-    await message.answer(get_text(uid, "enter_user_id"), reply_markup=ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="🔙 Back to User")]], resize_keyboard=True
-    ))
-    await state.set_state(AdminState.buy_user_id)
-
-@router.message(AdminState.buy_user_id, F.text)
-async def admin_buy_user_id(message: Message, state: FSMContext):
-    uid = message.from_user.id
-    if uid not in ADMIN_IDS:
-        return
-    
-    if message.text == "🔙 Back to User":
-        await back_to_user(message)
-        await state.clear()
-        return
-    
-    try:
-        target_id = int(message.text.strip())
-    except:
-        await message.answer("❌ Invalid ID. Enter number:")
-        return
-    
-    user = await get_user(target_id)
-    if not user:
-        await DatabaseHelper.execute(
-            "INSERT INTO users (telegram_id, full_name, phone_number, address, language) VALUES ($1, 'User', 'N/A', 'N/A', 'en')",
-            target_id
-        )
-        user = await get_user(target_id)
-        await message.answer(f"✅ User {target_id} created automatically!")
-    
-    await state.update_data(target_user=target_id)
-    await message.answer(get_text(uid, "enter_ticket_number"))
-    await state.set_state(AdminState.buy_ticket_num)
-
-@router.message(AdminState.buy_ticket_num, F.text)
-async def admin_buy_ticket(message: Message, state: FSMContext):
-    uid = message.from_user.id
-    if uid not in ADMIN_IDS:
-        return
-    
-    data = await state.get_data()
-    target_id = data.get("target_user")
-    
-    ticket_input = message.text.strip().lower()
-    
-    if ticket_input == 'random':
-        ticket = await DatabaseHelper.fetch_one("SELECT ticket_id, ticket_number FROM tickets WHERE status = 'available' LIMIT 1")
-    else:
-        try:
-            num = int(ticket_input)
-            ticket = await DatabaseHelper.fetch_one("SELECT ticket_id, ticket_number FROM tickets WHERE ticket_number = $1 AND status = 'available'", num)
-        except:
-            await message.answer("❌ Invalid number.")
-            return
-    
-    if not ticket:
-        await message.answer("❌ No available ticket.")
-        return
-    
-    ticket_id, ticket_num = ticket
-    user = await get_user(target_id)
-    if not user:
-        await message.answer(get_text(uid, "user_not_found"))
-        return
-    
-    user_id = user[0]
-    phone = user[3] or "N/A"
-    name = user[2] or "User"
-    
-    await DatabaseHelper.execute("UPDATE tickets SET status = 'sold', user_id = $1, telegram_id = $2, phone_number = $3, full_name = $4, assigned_at = CURRENT_TIMESTAMP WHERE ticket_id = $5", user_id, target_id, phone, name, ticket_id)
-    await DatabaseHelper.execute("INSERT INTO payments (user_id, telegram_id, phone_number, full_name, ticket_id, ticket_number, amount, status, admin_notes) VALUES ($1, $2, $3, $4, $5, $6, 3000, 'approved', $7)", user_id, target_id, phone, name, ticket_id, ticket_num, "Admin purchase")
-    await DatabaseHelper.execute("UPDATE users SET total_spent = COALESCE(total_spent, 0) + 3000 WHERE telegram_id = $1", target_id)
-    
-    await state.clear()
-    await message.answer(f"✅ Ticket #{ticket_num} assigned to user {target_id}!\n👤 {name}\n📱 {phone}", reply_markup=admin_menu(uid))
-    
-    try:
-        await telegram_bot.send_message(target_id, f"🎉 Admin purchased ticket #{ticket_num} for you!")
-    except:
-        pass
-
-@router.message(F.text == "📝 Manual Ticket")
-async def admin_manual(message: Message, state: FSMContext):
-    uid = message.from_user.id
-    if uid not in ADMIN_IDS:
-        return
-    
-    await message.answer("📝 Enter ticket number to mark as sold:", reply_markup=ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="🔙 Back to User")]], resize_keyboard=True
-    ))
-    await state.set_state(AdminState.manual_ticket)
-
-@router.message(AdminState.manual_ticket, F.text)
-async def admin_manual_process(message: Message, state: FSMContext):
-    uid = message.from_user.id
-    if uid not in ADMIN_IDS:
-        return
-    
-    if message.text == "🔙 Back to User":
-        await back_to_user(message)
-        await state.clear()
-        return
-    
-    try:
-        num = int(message.text.strip())
-    except:
-        await message.answer("❌ Invalid number.")
-        return
-    
-    result = await DatabaseHelper.execute("UPDATE tickets SET status = 'sold', assigned_at = CURRENT_TIMESTAMP WHERE ticket_number = $1 AND status = 'available'", num)
-    
-    if "UPDATE 1" in str(result):
-        await message.answer(f"✅ Ticket #{num} marked as sold!", reply_markup=admin_menu(uid))
-    else:
-        await message.answer(f"❌ Ticket #{num} not available.", reply_markup=admin_menu(uid))
-    
-    await state.clear()
-
-# =====================================================
-# MAIN
-# =====================================================
-
-async def set_commands():
-    await telegram_bot.set_my_commands([
-        BotCommand(command="start", description="🏠 Start"),
-        BotCommand(command="admin", description="🛠️ Admin"),
-    ])
-
-async def main():
-    await init_db_postgres()
-    await generate_tickets()
-    await set_commands()
-    
-    try:
-        await telegram_bot.delete_webhook(drop_pending_updates=True)
-    except:
-        pass
-    
-    await asyncio.sleep(1)
-    dp.include_router(router)
-    
-    logger.info("🚀 Bot started with PostgreSQL!")
-    logger.info(f"👤 Admins: {ADMIN_IDS}")
-    logger.info(f"🌐 WebApp: {WEBAPP_URL}")
-    
-    await dp.start_polling(telegram_bot, allowed_updates=["message", "callback_query"], skip_updates=True)
-
-if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("🛑 Stopped")
-    except Exception as e:
-        logger.error(f"❌ Error: {e}")
+async def get_payment_accounts():
+    """Get payment account details"""
+    return [
+        {"name": "CBE", "account": "1000786684491"},
+        {"name": "Abyssinia", "account": "264517826"},
+        {"name": "Telebirr", "account": "0979774444"}
+    ]
