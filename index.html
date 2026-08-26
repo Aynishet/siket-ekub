@@ -884,7 +884,8 @@ async function checkRegistrationStatus() {
     const container = document.getElementById('registrationContainer');
     const result = await apiCall(`/user/${currentUser.id}`);
     
-    if (result.success && result.data && result.data.is_registered) {
+    // Check if user is registered (based on is_registered flag or phone_number)
+    if (result && result.data && (result.data.is_registered || result.data.phone_number !== 'N/A')) {
         const data = result.data;
         currentUser.isRegistered = true;
         currentUser.phone = data.phone_number || 'N/A';
@@ -1314,10 +1315,10 @@ async function loadAccount() {
     try {
         const result = await apiCall(`/user/${currentUser.id}`);
         
-        if (result.success) {
-            const data = result.data || {};
+        // Always handle the response, even if success is false
+        if (result && result.data) {
+            const data = result.data;
             
-            // Use the data, even if it's empty
             currentUser.balance = data.balance || 0;
             currentUser.totalSpent = data.total_spent || 0;
             currentUser.tickets = data.tickets || [];
@@ -1327,7 +1328,7 @@ async function loadAccount() {
             currentUser.address = data.address || 'N/A';
             currentUser.isRegistered = data.is_registered || false;
             
-            // Update UI
+            // Update UI elements
             document.getElementById('accName').textContent = currentUser.full_name;
             document.getElementById('accId').textContent = currentUser.id;
             document.getElementById('accPhone').textContent = currentUser.phone;
@@ -1336,7 +1337,10 @@ async function loadAccount() {
             document.getElementById('accSpent').textContent = currentUser.totalSpent.toLocaleString() + ' ETB';
             
             // Update wallet badge
-            document.getElementById('userWallet').innerHTML = '<i class="fas fa-wallet" style="margin-right:4px;"></i> ' + currentUser.balance.toLocaleString() + ' ETB';
+            const walletEl = document.getElementById('userWallet');
+            if (walletEl) {
+                walletEl.innerHTML = '<i class="fas fa-wallet" style="margin-right:4px;"></i> ' + currentUser.balance.toLocaleString() + ' ETB';
+            }
             document.getElementById('walletAmount').textContent = currentUser.balance.toLocaleString();
             document.getElementById('refundBalance').textContent = currentUser.balance.toLocaleString() + ' ETB';
             
@@ -1350,16 +1354,26 @@ async function loadAccount() {
             
             renderMyTicketsSummary();
         } else {
-            // Even on error, set defaults
-            console.warn('Account load warning:', result.error);
-            showToast('⚠️ Could not load full account data', 'info');
+            // Fallback if no data
+            console.warn('No user data returned');
+            setDefaultAccountData();
         }
     } catch (error) {
         console.error('Account load error:', error);
+        setDefaultAccountData();
         showToast('⚠️ Error loading account', 'error');
     }
 }
 
+function setDefaultAccountData() {
+    document.getElementById('accName').textContent = currentUser.name || 'User';
+    document.getElementById('accId').textContent = currentUser.id || 'N/A';
+    document.getElementById('accPhone').textContent = 'Not set';
+    document.getElementById('accBalance').textContent = '0 ETB';
+    document.getElementById('accTickets').textContent = '0';
+    document.getElementById('accSpent').textContent = '0 ETB';
+    document.getElementById('walletAmount').textContent = '0';
+}
     function renderMyTicketsSummary() {
     const box = document.getElementById('myTicketsSummary');
     if (!currentUser.tickets || currentUser.tickets.length === 0) { 
