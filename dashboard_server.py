@@ -347,7 +347,7 @@ def serve_assets(path):
 
 
 # ============================================================
-# USER API - COMPLETE FIXED
+# USER API - COMPLETE FIXED USING TELEGRAM ID
 # ============================================================
 
 @app.route("/api/user/<int:telegram_id>", methods=["GET"])
@@ -363,7 +363,7 @@ def api_get_user(telegram_id):
 
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-        # Get user from database
+        # Get user by telegram_id
         cursor.execute("""
             SELECT
                 user_id,
@@ -382,7 +382,7 @@ def api_get_user(telegram_id):
         
         user = cursor.fetchone()
         
-        # If user not found, return empty data with is_registered=False
+        # If user not found, return default data
         if not user:
             return jsonify({
                 "success": True,
@@ -414,7 +414,7 @@ def api_get_user(telegram_id):
         """, (telegram_id,))
         tickets = fetch_all(cursor)
 
-        # Get user payments
+        # Get user payments - using amount column
         cursor.execute("""
             SELECT
                 payment_id,
@@ -430,6 +430,12 @@ def api_get_user(telegram_id):
         """, (telegram_id,))
         payments = fetch_all(cursor)
 
+        # Calculate total spent from payments
+        total_spent = 0
+        for p in payments:
+            if p.get('status') == 'approved':
+                total_spent += float(p.get('amount', 0))
+
         return jsonify({
             "success": True,
             "data": {
@@ -439,7 +445,7 @@ def api_get_user(telegram_id):
                 "phone_number": user.get("phone_number") or "N/A",
                 "address": user.get("address") or "N/A",
                 "balance": float(user.get("balance") or 0),
-                "total_spent": float(user.get("total_spent") or 0),
+                "total_spent": float(total_spent or 0),
                 "tickets": tickets,
                 "payments": payments,
                 "ticket_count": len(tickets),
