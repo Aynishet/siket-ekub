@@ -897,28 +897,47 @@ async def balance_cmd(message: Message):
         await message.answer(get_text(uid, "registration_required"))
         return
     
-    balance = user[5] if len(user) > 5 else 0
-    spent = user[6] if len(user) > 6 else 0
+    # Get total approved amount
+    approved = await DatabaseHelper.fetch_one(
+        "SELECT COALESCE(SUM(amount), 0) FROM payments WHERE telegram_id = $1 AND status = 'approved'",
+        uid
+    )
     
-    try:
-        balance = float(balance) if balance else 0
-    except:
-        balance = 0
+    # Get total rejected amount
+    rejected = await DatabaseHelper.fetch_one(
+        "SELECT COALESCE(SUM(amount), 0) FROM payments WHERE telegram_id = $1 AND status = 'rejected'",
+        uid
+    )
     
-    try:
-        spent = float(spent) if spent else 0
-    except:
-        spent = 0
+    # Get pending payments
+    pending = await DatabaseHelper.fetch_one(
+        "SELECT COUNT(*) FROM payments WHERE telegram_id = $1 AND status = 'pending'",
+        uid
+    )
     
-    tickets = await get_user_ticket_count(uid)
-    pending = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM payments WHERE telegram_id = $1 AND status = 'pending'", uid)
+    approved_amount = approved[0] if approved else 0
+    rejected_amount = rejected[0] if rejected else 0
     pending_count = pending[0] if pending else 0
     
-    text = get_text(uid, "balance_info", balance=balance, tickets=tickets, spent=spent)
+    # Balance = Approved - Rejected
+    balance = approved_amount - rejected_amount
+    
+    # Total spent = Approved (what user actually paid and kept)
+    total_spent = approved_amount
+    
+    # Get ticket count
+    tickets = await get_user_ticket_count(uid)
+    
+    text = f"💰 **Balance: {balance:.2f} ETB**\n"
+    text += f"🎫 Tickets: {tickets}\n"
+    text += f"💸 Total Spent: {total_spent:.2f} ETB\n\n"
+    text += f"✅ Approved: {approved_amount:.2f} ETB\n"
+    text += f"❌ Rejected: {rejected_amount:.2f} ETB"
+    
     if pending_count > 0:
         text += f"\n\n⏳ Pending Payments: {pending_count}"
     
-    await message.answer(text, reply_markup=user_menu(uid))
+    await message.answer(text, reply_markup=user_menu(uid), parse_mode="Markdown")
 
 @router.message(F.text.in_(PRIZES_TEXTS))
 async def prizes_cmd(message: Message):
