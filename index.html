@@ -882,36 +882,95 @@
 
 async function checkRegistrationStatus() {
     const container = document.getElementById('registrationContainer');
-    const result = await apiCall(`/user/${currentUser.id}`);
+    if (!container) return;
     
-    // Check if user is registered (based on is_registered flag or phone_number)
-    if (result && result.data && (result.data.is_registered || result.data.phone_number !== 'N/A')) {
-        const data = result.data;
-        currentUser.isRegistered = true;
-        currentUser.phone = data.phone_number || 'N/A';
-        currentUser.address = data.address || 'N/A';
-        currentUser.full_name = data.full_name || 'User';
+    try {
+        const result = await apiCall(`/user/${currentUser.id}`);
         
-        container.innerHTML = `
-            <div class="already-registered-box">
-                <span class="check-icon">✅</span>
-                <h3>You Are Already Registered!</h3>
-                <p style="color:var(--text-secondary); margin-top:4px;">
-                    👤 <strong>${data.full_name || 'User'}</strong>
-                </p>
-                <p style="color:var(--text-secondary); margin-top:4px;">
-                    📱 <strong>${data.phone_number || 'N/A'}</strong>
-                </p>
-                <p style="color:var(--text-muted); font-size:11px; margin-top:4px;">
-                    📍 ${data.address || 'Address not set'}
-                </p>
-                <button class="primary-btn" style="margin-top:12px; width:auto; padding:8px 24px;" onclick="openPage('account', document.querySelectorAll('.bottom-nav a')[4])">
-                    <i class="fas fa-user"></i> View My Account
-                </button>
-            </div>
-        `;
-    } else {
-        currentUser.isRegistered = false;
+        // Check if user is registered using the is_registered flag
+        if (result && result.success && result.data) {
+            const data = result.data;
+            
+            // USE THE is_registered FLAG, not phone_number
+            if (data.is_registered === true) {
+                currentUser.isRegistered = true;
+                currentUser.phone = data.phone_number || 'N/A';
+                currentUser.address = data.address || 'N/A';
+                currentUser.full_name = data.full_name || 'User';
+                currentUser.balance = data.balance || 0;
+                currentUser.totalSpent = data.total_spent || 0;
+                currentUser.tickets = data.tickets || [];
+                
+                container.innerHTML = `
+                    <div class="already-registered-box">
+                        <span class="check-icon">✅</span>
+                        <h3>You Are Already Registered!</h3>
+                        <p style="color:var(--text-secondary); margin-top:4px;">
+                            👤 <strong>${data.full_name || 'User'}</strong>
+                        </p>
+                        <p style="color:var(--text-secondary); margin-top:4px;">
+                            📱 <strong>${data.phone_number || 'N/A'}</strong>
+                        </p>
+                        <p style="color:var(--text-muted); font-size:11px; margin-top:4px;">
+                            📍 ${data.address || 'Address not set'}
+                        </p>
+                        <p style="color:var(--text-muted); font-size:11px; margin-top:4px;">
+                            💰 Balance: ${(data.balance || 0).toLocaleString()} ETB
+                        </p>
+                        <p style="color:var(--text-muted); font-size:11px;">
+                            🎫 Tickets: ${(data.tickets || []).length}
+                        </p>
+                        <button class="primary-btn" style="margin-top:12px; width:auto; padding:8px 24px;" onclick="openPage('account', document.querySelectorAll('.bottom-nav a')[4])">
+                            <i class="fas fa-user"></i> View My Account
+                        </button>
+                    </div>
+                `;
+            } else {
+                currentUser.isRegistered = false;
+                container.innerHTML = `
+                    <div class="registration-box">
+                        <div class="form-group">
+                            <label>👤 Full Name</label>
+                            <input type="text" id="regName" placeholder="e.g. John Doe" value="${currentUser.name || ''}">
+                        </div>
+                        <div class="form-group">
+                            <label>📱 Phone Number</label>
+                            <input type="tel" id="regPhone" placeholder="e.g. 0912345678">
+                        </div>
+                        <div class="form-group">
+                            <label>📍 Physical Address</label>
+                            <input type="text" id="regAddress" placeholder="e.g. Addis Ababa, Bole">
+                        </div>
+                        <button class="primary-btn" onclick="registerUser()"><i class="fas fa-check-circle"></i> Register</button>
+                        <div id="regStatus" class="reg-status"></div>
+                    </div>
+                `;
+            }
+        } else {
+            // Show registration form on error
+            currentUser.isRegistered = false;
+            container.innerHTML = `
+                <div class="registration-box">
+                    <div class="form-group">
+                        <label>👤 Full Name</label>
+                        <input type="text" id="regName" placeholder="e.g. John Doe" value="${currentUser.name || ''}">
+                    </div>
+                    <div class="form-group">
+                        <label>📱 Phone Number</label>
+                        <input type="tel" id="regPhone" placeholder="e.g. 0912345678">
+                    </div>
+                    <div class="form-group">
+                        <label>📍 Physical Address</label>
+                        <input type="text" id="regAddress" placeholder="e.g. Addis Ababa, Bole">
+                    </div>
+                    <button class="primary-btn" onclick="registerUser()"><i class="fas fa-check-circle"></i> Register</button>
+                    <div id="regStatus" class="reg-status"></div>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Registration check error:', error);
+        // Show registration form on error
         container.innerHTML = `
             <div class="registration-box">
                 <div class="form-group">
