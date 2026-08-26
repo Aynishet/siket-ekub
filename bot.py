@@ -846,22 +846,39 @@ async def my_tickets_cmd(message: Message):
         await message.answer(get_text(uid, "registration_required"))
         return
     
-    tickets = await get_user_tickets(uid)
+    # Use direct database query to ensure correct data
+    tickets = await DatabaseHelper.fetch(
+        "SELECT ticket_number, assigned_at, status FROM tickets WHERE telegram_id = $1 ORDER BY ticket_number",
+        uid
+    )
+    
     if not tickets:
         await message.answer(get_text(uid, "no_tickets_owned"), reply_markup=user_menu(uid))
         return
     
     total = len(tickets)
-    sold = sum(1 for t in tickets if t[2] == 'sold')
-    pending = sum(1 for t in tickets if t[2] == 'pending')
+    sold = 0
+    pending = 0
+    
+    # Count statuses safely
+    for t in tickets:
+        status = t[2] if len(t) > 2 else 'unknown'
+        if status == 'sold':
+            sold += 1
+        elif status == 'pending':
+            pending += 1
     
     text = get_text(uid, "your_tickets", count=total)
     text += f"📊 Sold: {sold}, Pending: {pending}\n\n"
     
     for ticket in tickets[:20]:
-        num, date, status = ticket
+        num = ticket[0] if len(ticket) > 0 else 'N/A'
+        date = ticket[1] if len(ticket) > 1 else None
+        status = ticket[2] if len(ticket) > 2 else 'unknown'
+        
         status_icon = "✅" if status == "sold" else "⏳"
-        text += f"{status_icon} #{num} - {date[:10] if date else 'N/A'}\n"
+        date_str = date[:10] if date else 'N/A'
+        text += f"{status_icon} #{num} - {date_str}\n"
     
     if len(tickets) > 20:
         text += f"\n... and {len(tickets)-20} more"
