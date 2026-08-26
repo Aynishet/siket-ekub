@@ -1,7 +1,7 @@
 # database.py - Complete PostgreSQL Version with All Features
 import os
 import logging
-import asyncio  # ← ADD THIS
+import asyncio  # ← FIXED: Added this import
 from datetime import datetime
 
 # =====================================================
@@ -9,7 +9,7 @@ from datetime import datetime
 # =====================================================
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_NAME = os.path.join(BASE_DIR, 'instance', 'siket_ekub.db')  # For SQLite fallback
+DB_NAME = os.path.join(BASE_DIR, 'instance', 'siket_ekub.db')
 
 # Try to import asyncpg, fallback to aiosqlite
 try:
@@ -23,7 +23,7 @@ except ImportError:
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
 # =====================================================
-# DATABASE HELPER - WORKS WITH BOTH SQLITE AND POSTGRES
+# DATABASE HELPER
 # =====================================================
 
 class DatabaseHelper:
@@ -162,7 +162,7 @@ async def init_postgres():
             )
         ''')
         
-        # Tickets table - FIXED with all columns
+        # Tickets table
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS tickets (
                 ticket_id SERIAL PRIMARY KEY,
@@ -181,7 +181,7 @@ async def init_postgres():
             )
         ''')
         
-        # Payments table - FIXED with all columns
+        # Payments table
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS payments (
                 payment_id SERIAL PRIMARY KEY,
@@ -335,42 +335,6 @@ async def init_postgres():
                 ''', prize)
             
             print("✅ Default data created successfully with 20,000 tickets!")
-        
-        # =====================================================
-        # FIX: Add missing columns to existing tables
-        # =====================================================
-        
-        # Fix tickets table
-        try:
-            await conn.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS full_name TEXT")
-            print("✅ Added full_name to tickets")
-        except Exception as e:
-            print(f"full_name tickets: {e}")
-        
-        try:
-            await conn.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS phone_number TEXT")
-            print("✅ Added phone_number to tickets")
-        except Exception as e:
-            print(f"phone_number tickets: {e}")
-        
-        # Fix payments table
-        try:
-            await conn.execute("ALTER TABLE payments ADD COLUMN IF NOT EXISTS full_name TEXT")
-            print("✅ Added full_name to payments")
-        except Exception as e:
-            print(f"full_name payments: {e}")
-        
-        try:
-            await conn.execute("ALTER TABLE payments ADD COLUMN IF NOT EXISTS phone_number TEXT")
-            print("✅ Added phone_number to payments")
-        except Exception as e:
-            print(f"phone_number payments: {e}")
-        
-        try:
-            await conn.execute("ALTER TABLE payments ADD COLUMN IF NOT EXISTS amount DECIMAL(15,2) DEFAULT 3000")
-            print("✅ Added amount to payments")
-        except Exception as e:
-            print(f"amount payments: {e}")
         
         print("✅ PostgreSQL Database ready!")
         
