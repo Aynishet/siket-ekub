@@ -2,6 +2,7 @@
 # BOT.PY - SIKET EKUB COMPLETE - FULLY FIXED
 # =====================================================
 
+import asyncio  # ← FIX: Added this import
 import sys
 import os
 import logging
@@ -966,12 +967,14 @@ async def process_payment(message: Message, state: FSMContext):
                 img = base64.b64decode(screenshot)
                 await telegram_bot.send_photo(admin, BufferedInputFile(img, filename="pay.jpg"), caption=msg, reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="✅ Approve", callback_data=f"approve_{payment_id}")],
-                    [InlineKeyboardButton(text="❌ Reject", callback_data=f"reject_{payment_id}")]
+                    [InlineKeyboardButton(text="❌ Reject", callback_data=f"reject_{payment_id}")],
+                    [InlineKeyboardButton(text="🔙 Back", callback_data="admin_back")]
                 ]))
             else:
                 await telegram_bot.send_message(admin, msg, reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="✅ Approve", callback_data=f"approve_{payment_id}")],
-                    [InlineKeyboardButton(text="❌ Reject", callback_data=f"reject_{payment_id}")]
+                    [InlineKeyboardButton(text="❌ Reject", callback_data=f"reject_{payment_id}")],
+                    [InlineKeyboardButton(text="🔙 Back", callback_data="admin_back")]
                 ]))
         except Exception as e:
             logger.error(f"Error notifying admin: {e}")
