@@ -880,92 +880,101 @@
       }
     }
 
-    async function checkRegistrationStatus() {
-      const container = document.getElementById('registrationContainer');
-      const result = await apiCall(`/user/${currentUser.id}`);
-      
-      if (result.success && result.data && result.data.phone_number) {
+async function checkRegistrationStatus() {
+    const container = document.getElementById('registrationContainer');
+    const result = await apiCall(`/user/${currentUser.id}`);
+    
+    if (result.success && result.data && result.data.phone_number) {
         const data = result.data;
         currentUser.isRegistered = true;
         currentUser.phone = data.phone_number;
         currentUser.address = data.address || 'N/A';
+        currentUser.full_name = data.full_name || 'User';
         
         container.innerHTML = `
-          <div class="already-registered-box">
-            <span class="check-icon">✅</span>
-            <h3>You Are Already Registered!</h3>
-            <p style="color:var(--text-secondary); margin-top:4px;">
-              📱 <strong>${data.phone_number}</strong>
-            </p>
-            <p style="color:var(--text-muted); font-size:11px; margin-top:4px;">
-              📍 ${data.address || 'Address not set'}
-            </p>
-            <p style="color:var(--text-muted); font-size:11px; margin-top:8px;">
-              Registered on: ${data.registration_date || 'N/A'}
-            </p>
-            <button class="primary-btn" style="margin-top:12px; width:auto; padding:8px 24px;" onclick="openPage('account', document.querySelectorAll('.bottom-nav a')[4])">
-              <i class="fas fa-user"></i> View My Account
-            </button>
-          </div>
+            <div class="already-registered-box">
+                <span class="check-icon">✅</span>
+                <h3>You Are Already Registered!</h3>
+                <p style="color:var(--text-secondary); margin-top:4px;">
+                    👤 <strong>${data.full_name || 'User'}</strong>
+                </p>
+                <p style="color:var(--text-secondary); margin-top:4px;">
+                    📱 <strong>${data.phone_number}</strong>
+                </p>
+                <p style="color:var(--text-muted); font-size:11px; margin-top:4px;">
+                    📍 ${data.address || 'Address not set'}
+                </p>
+                <p style="color:var(--text-muted); font-size:11px; margin-top:8px;">
+                    Registered on: ${data.registration_date || 'N/A'}
+                </p>
+                <button class="primary-btn" style="margin-top:12px; width:auto; padding:8px 24px;" onclick="openPage('account', document.querySelectorAll('.bottom-nav a')[4])">
+                    <i class="fas fa-user"></i> View My Account
+                </button>
+            </div>
         `;
-      } else {
+    } else {
         currentUser.isRegistered = false;
         container.innerHTML = `
-          <div class="registration-box">
-            <div class="form-group">
-              <label>📱 Phone Number</label>
-              <input type="tel" id="regPhone" placeholder="e.g. 0912345678">
+            <div class="registration-box">
+                <div class="form-group">
+                    <label>👤 Full Name</label>
+                    <input type="text" id="regName" placeholder="e.g. John Doe" value="${currentUser.name || ''}">
+                </div>
+                <div class="form-group">
+                    <label>📱 Phone Number</label>
+                    <input type="tel" id="regPhone" placeholder="e.g. 0912345678">
+                </div>
+                <div class="form-group">
+                    <label>📍 Physical Address</label>
+                    <input type="text" id="regAddress" placeholder="e.g. Addis Ababa, Bole">
+                </div>
+                <button class="primary-btn" onclick="registerUser()"><i class="fas fa-check-circle"></i> Register</button>
+                <div id="regStatus" class="reg-status"></div>
             </div>
-            <div class="form-group">
-              <label>📍 Physical Address</label>
-              <input type="text" id="regAddress" placeholder="e.g. Addis Ababa, Bole">
-            </div>
-            <button class="primary-btn" onclick="registerUser()"><i class="fas fa-check-circle"></i> Register</button>
-            <div id="regStatus" class="reg-status"></div>
-          </div>
         `;
-      }
     }
+}
 
     // ✅ FIXED: registerUser uses /user/create with correct field names
-    async function registerUser() {
-      const phone = document.getElementById('regPhone').value.trim();
-      const address = document.getElementById('regAddress').value.trim();
-      const statusEl = document.getElementById('regStatus');
-      
-      if (!phone || !address) { 
+   async function registerUser() {
+    const name = document.getElementById('regName').value.trim();
+    const phone = document.getElementById('regPhone').value.trim();
+    const address = document.getElementById('regAddress').value.trim();
+    const statusEl = document.getElementById('regStatus');
+    
+    if (!name || !phone || !address) { 
         statusEl.className = 'reg-status error'; 
-        statusEl.textContent = 'Please fill in both phone and address.'; 
+        statusEl.textContent = 'Please fill in all fields (Name, Phone, Address).'; 
         return; 
-      }
-      if (!phone.match(/^09\d{8}$/)) { 
+    }
+    if (!phone.match(/^09\d{8}$/)) { 
         statusEl.className = 'reg-status error'; 
         statusEl.textContent = 'Invalid phone number! Use 09XXXXXXXX format.'; 
         return; 
-      }
-      
-      const result = await apiCall('/user/create', 'POST', { 
+    }
+    
+    const result = await apiCall('/user/create', 'POST', { 
         telegram_id: currentUser.id, 
         phone_number: phone, 
         address: address, 
-        full_name: currentUser.name 
-      });
-      
-      if (result.success) { 
+        full_name: name 
+    });
+    
+    if (result.success) { 
         currentUser.phone = phone; 
         currentUser.address = address; 
+        currentUser.full_name = name;
         currentUser.isRegistered = true;
         statusEl.className = 'reg-status success'; 
         statusEl.textContent = '✅ Registration successful!'; 
         loadAccount(); 
         showToast('✅ Registration successful!', 'success');
         setTimeout(checkRegistrationStatus, 1000);
-      } else { 
+    } else { 
         statusEl.className = 'reg-status error'; 
         statusEl.textContent = '❌ ' + (result.error || 'Registration failed'); 
-      }
     }
-
+}
     let currentSlide = 0;
     let slideInterval = null;
     
@@ -1305,47 +1314,58 @@
   }
 }
 
-    async function loadAccount() {
-      const result = await apiCall(`/user/${currentUser.id}`);
-      if (result.success && result.data) {
-        const data = result.data; 
-        currentUser.balance = data.balance; 
-        currentUser.totalSpent = data.total_spent; 
-        currentUser.tickets = data.tickets || []; 
+async function loadAccount() {
+    const result = await apiCall(`/user/${currentUser.id}`);
+    if (result.success && result.data) {
+        const data = result.data;
+        
+        // FIXED: Use correct field names from API
+        currentUser.balance = data.balance || 0;
+        currentUser.totalSpent = data.total_spent || 0;
+        currentUser.tickets = data.tickets || [];
         currentUser.transactions = data.payments || [];
         currentUser.phone = data.phone_number || 'Not set';
+        currentUser.full_name = data.full_name || 'User';
+        currentUser.address = data.address || 'N/A';
         
-        document.getElementById('accName').textContent = data.full_name || 'User';
+        document.getElementById('accName').textContent = currentUser.full_name;
         document.getElementById('accId').textContent = currentUser.id;
-        document.getElementById('accPhone').textContent = data.phone_number || 'Not set';
-        document.getElementById('accBalance').textContent = data.balance.toLocaleString() + ' ETB';
-        document.getElementById('accTickets').textContent = data.tickets ? data.tickets.length : 0;
-        document.getElementById('accSpent').textContent = data.total_spent.toLocaleString() + ' ETB';
-        document.getElementById('userWallet').textContent = data.balance.toLocaleString() + ' ETB';
-        document.getElementById('walletAmount').textContent = data.balance.toLocaleString();
-        document.getElementById('refundBalance').textContent = data.balance.toLocaleString() + ' ETB';
+        document.getElementById('accPhone').textContent = currentUser.phone;
+        document.getElementById('accBalance').textContent = currentUser.balance.toLocaleString() + ' ETB';
+        document.getElementById('accTickets').textContent = currentUser.tickets.length;
+        document.getElementById('accSpent').textContent = currentUser.totalSpent.toLocaleString() + ' ETB';
+        document.getElementById('userWallet').textContent = currentUser.balance.toLocaleString() + ' ETB';
+        document.getElementById('walletAmount').textContent = currentUser.balance.toLocaleString();
+        document.getElementById('refundBalance').textContent = currentUser.balance.toLocaleString() + ' ETB';
         
-        if (data.tickets && data.tickets.length > 0) {
-          const ticketNumbers = data.tickets.map(t => `#${t.ticket_number}`).join(', ');
-          document.getElementById('accTicketNumbers').textContent = ticketNumbers;
+        // Display ticket numbers
+        if (currentUser.tickets && currentUser.tickets.length > 0) {
+            const ticketNumbers = currentUser.tickets.map(t => `#${t.ticket_number}`).join(', ');
+            document.getElementById('accTicketNumbers').textContent = ticketNumbers;
         } else {
-          document.getElementById('accTicketNumbers').textContent = 'None';
+            document.getElementById('accTicketNumbers').textContent = 'None';
         }
         
         renderMyTicketsSummary();
-      }
+    } else {
+        console.error('Failed to load account:', result.error);
+        showToast('❌ Failed to load account data', 'error');
     }
+}
 
     function renderMyTicketsSummary() {
-      const box = document.getElementById('myTicketsSummary');
-      if (currentUser.tickets.length === 0) { box.innerHTML = 'No active tickets yet.'; return; }
-      box.innerHTML = currentUser.tickets.slice(0, 5).map(t => 
-        `<div style="display:flex; justify-content:space-between; margin-bottom:4px; border-bottom:1px solid rgba(255,255,255,0.04); padding-bottom:4px;">
-          <span>Ticket #${t.ticket_number} (${t.game_name})</span>
-          <span style="color:var(--pending-color);">${t.status}</span>
-        </div>`
-      ).join('');
+    const box = document.getElementById('myTicketsSummary');
+    if (!currentUser.tickets || currentUser.tickets.length === 0) { 
+        box.innerHTML = 'No active tickets yet.'; 
+        return; 
     }
+    box.innerHTML = currentUser.tickets.slice(0, 5).map(t => 
+        `<div style="display:flex; justify-content:space-between; margin-bottom:4px; border-bottom:1px solid rgba(255,255,255,0.04); padding-bottom:4px;">
+            <span>Ticket #${t.ticket_number}</span>
+            <span style="color:${t.status === 'sold' ? '#2ecc71' : '#f39c12'};">${t.status}</span>
+        </div>`
+    ).join('');
+}
 
     function toggleHistory() {
       const container = document.getElementById('historyContainer'); 
