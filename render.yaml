@@ -13,7 +13,7 @@ services:
       - key: BOT_TOKEN
         value: 8929371440:AAH7DFvko6YC98FtImSsgvVWn_Kqcl3pDRk
       - key: ADMIN_IDS
-        value: 699428281
+        value: "699428281,1029660827"
       
       # ====== PYTHON VERSION ======
       - key: PYTHON_VERSION
