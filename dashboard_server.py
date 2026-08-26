@@ -125,11 +125,9 @@ def get_dashboard_metrics():
 
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-        # Total members
         cursor.execute("SELECT COUNT(*) AS count FROM users")
         total_members = cursor.fetchone()["count"]
 
-        # Paid users
         cursor.execute("""
             SELECT COUNT(DISTINCT user_id) AS count
             FROM payments
@@ -137,7 +135,6 @@ def get_dashboard_metrics():
         """)
         paid_users = cursor.fetchone()["count"]
 
-        # Unpaid users
         cursor.execute("""
             SELECT COUNT(*) AS count
             FROM users u
@@ -148,7 +145,6 @@ def get_dashboard_metrics():
         """)
         unpaid_users = cursor.fetchone()["count"]
 
-        # Total payment
         cursor.execute("""
             SELECT COALESCE(SUM(amount), 0) AS total
             FROM payments
@@ -156,7 +152,6 @@ def get_dashboard_metrics():
         """)
         total_payment = cursor.fetchone()["total"] or 0
 
-        # Payment status counts
         cursor.execute("""
             SELECT status, COUNT(*) AS count
             FROM payments
@@ -167,7 +162,6 @@ def get_dashboard_metrics():
         for row in cursor.fetchall():
             payment_status_counts[row["status"]] = row["count"]
 
-        # Tickets stats
         cursor.execute("SELECT COUNT(*) AS count FROM tickets WHERE status = 'sold'")
         tickets_sold = cursor.fetchone()["count"]
 
@@ -180,7 +174,6 @@ def get_dashboard_metrics():
         cursor.execute("SELECT COUNT(*) AS count FROM tickets WHERE status = 'refunded'")
         tickets_refunded = cursor.fetchone()["count"]
 
-        # Recent payments
         cursor.execute("""
             SELECT
                 p.payment_id,
@@ -205,7 +198,6 @@ def get_dashboard_metrics():
         """)
         recent_payments = fetch_all(cursor)
 
-        # Members list
         cursor.execute("""
             SELECT
                 u.user_id,
@@ -239,7 +231,6 @@ def get_dashboard_metrics():
         """)
         members_list = fetch_all(cursor)
 
-        # Ticket buyers
         cursor.execute("""
             SELECT
                 u.user_id,
@@ -266,7 +257,6 @@ def get_dashboard_metrics():
         """)
         ticket_buyers = fetch_all(cursor)
 
-        # Daily stats
         cursor.execute("""
             SELECT
                 DATE(created_at) AS date,
@@ -481,77 +471,6 @@ def api_get_user(telegram_id):
 
 
 # ============================================================
-# USER BY USERNAME (ALTERNATIVE)
-# ============================================================
-
-@app.route("/api/user/by_username/<string:username>", methods=["GET"])
-def api_get_user_by_username(username):
-    """Get user by username (alternative lookup)"""
-    conn = None
-    try:
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({"success": False, "error": "Database connection failed"}), 500
-
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-
-        cursor.execute("""
-            SELECT
-                user_id,
-                telegram_id,
-                COALESCE(full_name, 'User') AS full_name,
-                COALESCE(phone_number, 'N/A') AS phone_number,
-                COALESCE(address, 'N/A') AS address,
-                COALESCE(balance, 0) AS balance,
-                COALESCE(total_spent, 0) AS total_spent,
-                created_at AS registration_date,
-                language
-            FROM users
-            WHERE full_name ILIKE %s
-            LIMIT 1
-        """, (f"%{username}%",))
-        
-        user = cursor.fetchone()
-        
-        if not user:
-            return jsonify({
-                "success": True,
-                "data": {
-                    "telegram_id": None,
-                    "full_name": username,
-                    "phone_number": "N/A",
-                    "address": "N/A",
-                    "balance": 0,
-                    "total_spent": 0,
-                    "tickets": [],
-                    "payments": [],
-                    "ticket_count": 0,
-                    "is_registered": False
-                }
-            }), 200
-
-        return jsonify({
-            "success": True,
-            "data": {
-                "user_id": user.get("user_id"),
-                "telegram_id": user.get("telegram_id"),
-                "full_name": user.get("full_name") or "User",
-                "phone_number": user.get("phone_number") or "N/A",
-                "address": user.get("address") or "N/A",
-                "balance": float(user.get("balance") or 0),
-                "total_spent": float(user.get("total_spent") or 0),
-                "is_registered": True
-            }
-        }), 200
-
-    except Exception as exc:
-        logger.exception("Error getting user by username: %s", exc)
-        return jsonify({"success": False, "error": str(exc)}), 500
-    finally:
-        safe_close(conn)
-
-
-# ============================================================
 # CREATE USER
 # ============================================================
 
@@ -752,7 +671,6 @@ def api_create_payment():
 
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-        # Get user
         cursor.execute("""
             SELECT user_id, telegram_id, phone_number, full_name
             FROM users
@@ -766,7 +684,6 @@ def api_create_payment():
 
         user_id = user["user_id"]
 
-        # Lock ticket
         cursor.execute("""
             SELECT ticket_id, ticket_number, status, user_id, telegram_id
             FROM tickets
@@ -798,7 +715,6 @@ def api_create_payment():
             conn.rollback()
             return jsonify({"success": False, "error": f"Ticket #{ticket_number} is no longer available"}), 409
 
-        # Check duplicate pending payment
         cursor.execute("""
             SELECT payment_id FROM payments
             WHERE ticket_id = %s AND status = 'pending'
@@ -814,7 +730,6 @@ def api_create_payment():
                 "payment_id": existing_payment["payment_id"]
             }), 409
 
-        # Create payment
         cursor.execute("""
             INSERT INTO payments (
                 user_id, telegram_id, phone_number, full_name,
@@ -992,7 +907,6 @@ def api_verify_payment():
 
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-        # Lock payment
         cursor.execute("""
             SELECT
                 payment_id, user_id, telegram_id,
@@ -1017,7 +931,6 @@ def api_verify_payment():
         amount = float(payment["amount"] or 3000)
 
         if status == "approved":
-            # Lock ticket
             cursor.execute("""
                 SELECT ticket_id, status, user_id
                 FROM tickets
@@ -1034,7 +947,6 @@ def api_verify_payment():
                 conn.rollback()
                 return jsonify({"success": False, "error": f"Ticket #{ticket_number} is not pending for this user"}), 409
 
-            # Ticket -> SOLD
             cursor.execute("""
                 UPDATE tickets
                 SET status = 'sold', assigned_at = CURRENT_TIMESTAMP
@@ -1045,7 +957,6 @@ def api_verify_payment():
                 conn.rollback()
                 return jsonify({"success": False, "error": "Could not finalize ticket"}), 409
 
-            # Payment -> APPROVED
             cursor.execute("""
                 UPDATE payments
                 SET status = 'approved', verified_by = %s, verified_at = CURRENT_TIMESTAMP, admin_notes = %s
@@ -1056,7 +967,6 @@ def api_verify_payment():
                 conn.rollback()
                 return jsonify({"success": False, "error": "Could not approve payment"}), 409
 
-            # User balance
             cursor.execute("""
                 UPDATE users
                 SET balance = COALESCE(balance, 0) + %s,
@@ -1065,7 +975,6 @@ def api_verify_payment():
             """, (amount, amount, user_id))
 
         else:
-            # REJECTED
             cursor.execute("""
                 SELECT status, user_id
                 FROM tickets
