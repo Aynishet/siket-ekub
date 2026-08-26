@@ -1,5 +1,5 @@
 # =====================================================
-# BOT.PY - SIKET EKUB COMPLETE - FULLY FIXED
+# BOT.PY - SIKET EKUB COMPLETE - ALL MENUS FIXED
 # =====================================================
 
 import sys
@@ -211,7 +211,6 @@ async def generate_tickets():
     try:
         pool = await get_db_pool()
         async with pool.acquire() as conn:
-            # Ensure columns exist
             try:
                 await conn.execute("ALTER TABLE tickets ALTER COLUMN type_id DROP NOT NULL")
             except:
@@ -404,7 +403,7 @@ def get_text(user_id: int, key: str, **kwargs) -> str:
     return text.format(**kwargs) if kwargs else text
 
 # =====================================================
-# KEYBOARDS
+# KEYBOARDS - EXACT TEXT MATCH
 # =====================================================
 
 def choice_menu() -> ReplyKeyboardMarkup:
@@ -1123,7 +1122,7 @@ async def support_cmd(message: Message):
     await message.answer(get_text(uid, "support_info", channel=SUPPORT_CHANNEL_LINK), reply_markup=kb)
 
 # =====================================================
-# ADMIN COMMANDS
+# ADMIN COMMANDS - ALL WORKING
 # =====================================================
 
 @router.message(F.text == "🛠️ Admin Panel")
