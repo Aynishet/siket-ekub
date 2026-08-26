@@ -347,7 +347,7 @@ def serve_assets(path):
 
 
 # ============================================================
-# USER API - COMPLETE FIXED USING TELEGRAM ID
+# USER API - COMPLETE FIXED
 # ============================================================
 
 @app.route("/api/user/<int:telegram_id>", methods=["GET"])
@@ -382,7 +382,7 @@ def api_get_user(telegram_id):
         
         user = cursor.fetchone()
         
-        # If user not found, return default data
+        # If user not found, return default data with is_registered=False
         if not user:
             return jsonify({
                 "success": True,
@@ -414,7 +414,7 @@ def api_get_user(telegram_id):
         """, (telegram_id,))
         tickets = fetch_all(cursor)
 
-        # Get user payments - using amount column
+        # Get user payments
         cursor.execute("""
             SELECT
                 payment_id,
@@ -430,12 +430,6 @@ def api_get_user(telegram_id):
         """, (telegram_id,))
         payments = fetch_all(cursor)
 
-        # Calculate total spent from payments
-        total_spent = 0
-        for p in payments:
-            if p.get('status') == 'approved':
-                total_spent += float(p.get('amount', 0))
-
         return jsonify({
             "success": True,
             "data": {
@@ -445,7 +439,7 @@ def api_get_user(telegram_id):
                 "phone_number": user.get("phone_number") or "N/A",
                 "address": user.get("address") or "N/A",
                 "balance": float(user.get("balance") or 0),
-                "total_spent": float(total_spent or 0),
+                "total_spent": float(user.get("total_spent") or 0),
                 "tickets": tickets,
                 "payments": payments,
                 "ticket_count": len(tickets),
@@ -677,6 +671,7 @@ def api_create_payment():
 
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
+        # Get user
         cursor.execute("""
             SELECT user_id, telegram_id, phone_number, full_name
             FROM users
@@ -690,6 +685,7 @@ def api_create_payment():
 
         user_id = user["user_id"]
 
+        # Lock ticket
         cursor.execute("""
             SELECT ticket_id, ticket_number, status, user_id, telegram_id
             FROM tickets
@@ -721,6 +717,7 @@ def api_create_payment():
             conn.rollback()
             return jsonify({"success": False, "error": f"Ticket #{ticket_number} is no longer available"}), 409
 
+        # Check duplicate pending payment
         cursor.execute("""
             SELECT payment_id FROM payments
             WHERE ticket_id = %s AND status = 'pending'
@@ -736,6 +733,7 @@ def api_create_payment():
                 "payment_id": existing_payment["payment_id"]
             }), 409
 
+        # Create payment
         cursor.execute("""
             INSERT INTO payments (
                 user_id, telegram_id, phone_number, full_name,
