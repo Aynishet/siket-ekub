@@ -211,6 +211,12 @@ async def generate_tickets():
             except:
                 pass
             
+            # Check if ticket_code column exists with NOT NULL
+            try:
+                await conn.execute("ALTER TABLE tickets ALTER COLUMN ticket_code DROP NOT NULL")
+            except:
+                pass
+            
             count = await conn.fetchval("SELECT COUNT(*) FROM tickets")
             if count and count > 0:
                 logger.info(f"✅ {count} tickets already exist")
@@ -234,14 +240,17 @@ async def generate_tickets():
                 end = min(start + batch_size - 1, 20000)
                 values = []
                 for i in range(start, end + 1):
-                    values.append(f"({i}, 1, 'available')")
-                query = f"INSERT INTO tickets (ticket_number, type_id, status) VALUES {','.join(values)}"
+                    # Include ticket_code as well (can be same as ticket_number or generated)
+                    values.append(f"({i}, 1, 'TKT-{i}', 'available')")
+                query = f"INSERT INTO tickets (ticket_number, type_id, ticket_code, status) VALUES {','.join(values)}"
                 await conn.execute(query)
                 logger.info(f"✅ Generated tickets {start}-{end}")
             
             logger.info("✅ All 20000 tickets generated successfully!")
     except Exception as e:
         logger.error(f"❌ Error generating tickets: {e}")
+        import traceback
+        traceback.print_exc()
 
 # =====================================================
 # LANGUAGE TEXTS
