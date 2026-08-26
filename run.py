@@ -34,7 +34,8 @@ def start_dashboard():
             from dashboard_server import app
             from waitress import serve
             
-            port = int(os.environ.get('PORT', 10000))
+            # Use port 8080 for dashboard (different from bot)
+            port = int(os.environ.get('DASHBOARD_PORT', 8080))
             print(f"📡 Dashboard binding to port {port}")
             serve(app, host='0.0.0.0', port=port, threads=4)
         except Exception as e:
@@ -61,15 +62,11 @@ def start_bot():
     signal.signal(signal.SIGTERM, signal_handler)
     
     try:
-        # Import and run bot
         import asyncio
         from bot import main
         
         print("✅ Bot module imported, running main()...")
         
-        # =====================================================
-        # FIX: Run bot with proper cleanup
-        # =====================================================
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
