@@ -66,7 +66,17 @@ def start_bot():
         from bot import main
         
         print("✅ Bot module imported, running main()...")
-        asyncio.run(main())
+        
+        # =====================================================
+        # FIX: Run bot with proper cleanup
+        # =====================================================
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(main())
+        finally:
+            loop.close()
+            
         print("✅ Bot main() completed successfully")
     except Exception as e:
         print("=" * 60)
