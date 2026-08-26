@@ -101,7 +101,7 @@ class DatabaseHelper:
     async def execute(query: str, *params):
         pool = await get_db_pool()
         async with pool.acquire() as conn:
-            if params:
+            if params and params[0] is not None:
                 return await conn.execute(query, *params)
             return await conn.execute(query)
     
@@ -110,11 +110,15 @@ class DatabaseHelper:
         pool = await get_db_pool()
         async with pool.acquire() as conn:
             async with conn.transaction():
-                for query, *params in queries:
-                    if params:
-                        await conn.execute(query, *params)
+                for item in queries:
+                    if isinstance(item, tuple):
+                        query, *params = item
+                        if params:
+                            await conn.execute(query, *params)
+                        else:
+                            await conn.execute(query)
                     else:
-                        await conn.execute(query)
+                        await conn.execute(item)
                 return True
 
 # =====================================================
