@@ -780,151 +780,188 @@
 
   </div>
 
-  <script>
+ <script>
     let tg = window.Telegram?.WebApp;
     if (tg) { tg.ready(); tg.expand(); }
 
     const userInfo = tg?.initDataUnsafe?.user || { id: "99887766", first_name: "Valued User" };
 
-    // API Base - uses your dashboard_server.py endpoints
+    // API Base
     const API_BASE = window.location.origin + '/api';
-    let currentUser = { id: userInfo.id, name: userInfo.first_name || "User", phone: "", address: "", balance: 0, tickets: [], transactions: [], totalSpent: 0, isRegistered: false };
+    let currentUser = { 
+        id: userInfo.id, 
+        name: userInfo.first_name || "User", 
+        phone: "", 
+        address: "", 
+        balance: 0, 
+        tickets: [], 
+        transactions: [], 
+        totalSpent: 0, 
+        isRegistered: false,
+        full_name: ""
+    };
     const state = { selectedPrize: 'BWD Leopard 3', selectedPrice: 3000, selectedTypeId: null, totalTickets: 20000, ticketData: [], chosenTickets: [], selectedBank: 'CBE', uploadedFile: null, lang: 'EN' };
 
     const PRIZES_DATA = [
-      { rank: '🥇', name: 'BWD Leopard 3', value: '8,000,000 ETB', price: 3000, category: 'vehicles', image: './assets/car/1st.png', badge: '1st Prize', group: 'top3', fullWidth: false },
-      { rank: '🥈', name: 'Hyundai Bayon', value: '5,000,000 ETB', price: 3000, category: 'vehicles', image: './assets/car/2nd.png', badge: '2nd Prize', group: 'top3', fullWidth: false },
-      { rank: '🏪', name: 'Shop Space', value: '4,000,000 ETB', price: 3000, category: 'property', image: './assets/car/3rd.png', badge: '3rd Prize', group: 'shop', fullWidth: true },
-      { rank: '💰', name: '1,000,000 ETB Cash', value: '1,000,000 ETB', price: 3000, category: 'cash', image: './assets/car/4th.png', badge: '4th Prize', group: 'cash', fullWidth: false },
-      { rank: '💰', name: '1,000,000 ETB Cash', value: '1,000,000 ETB', price: 3000, category: 'cash', image: './assets/car/5th.png', badge: '5th Prize', group: 'cash', fullWidth: false },
-      { rank: '💰', name: '1,000,000 ETB Cash', value: '1,000,000 ETB', price: 3000, category: 'cash', image: './assets/car/6th.png', badge: '6th Prize', group: 'cash', fullWidth: false },
-      { rank: '💰', name: '1,000,000 ETB Cash', value: '1,000,000 ETB', price: 3000, category: 'cash', image: './assets/car/7th.png', badge: '7th Prize', group: 'cash', fullWidth: false },
-      { rank: '💰', name: '500,000 ETB Cash', value: '500,000 ETB', price: 3000, category: 'cash', image: './assets/car/8th.png', badge: '8th Prize', group: 'cash', fullWidth: false },
-      { rank: '💰', name: '300,000 ETB Cash', value: '300,000 ETB', price: 3000, category: 'cash', image: './assets/car/9th.png', badge: '9th Prize', group: 'cash', fullWidth: false },
-      { rank: '💰', name: '200,000 ETB Cash', value: '200,000 ETB', price: 3000, category: 'cash', image: './assets/car/10th.png', badge: '10th Prize', group: 'cash', fullWidth: true }
+        { rank: '🥇', name: 'BWD Leopard 3', value: '8,000,000 ETB', price: 3000, category: 'vehicles', image: './assets/car/1st.png', badge: '1st Prize', group: 'top3', fullWidth: false },
+        { rank: '🥈', name: 'Hyundai Bayon', value: '5,000,000 ETB', price: 3000, category: 'vehicles', image: './assets/car/2nd.png', badge: '2nd Prize', group: 'top3', fullWidth: false },
+        { rank: '🏪', name: 'Shop Space', value: '4,000,000 ETB', price: 3000, category: 'property', image: './assets/car/3rd.png', badge: '3rd Prize', group: 'shop', fullWidth: true },
+        { rank: '💰', name: '1,000,000 ETB Cash', value: '1,000,000 ETB', price: 3000, category: 'cash', image: './assets/car/4th.png', badge: '4th Prize', group: 'cash', fullWidth: false },
+        { rank: '💰', name: '1,000,000 ETB Cash', value: '1,000,000 ETB', price: 3000, category: 'cash', image: './assets/car/5th.png', badge: '5th Prize', group: 'cash', fullWidth: false },
+        { rank: '💰', name: '1,000,000 ETB Cash', value: '1,000,000 ETB', price: 3000, category: 'cash', image: './assets/car/6th.png', badge: '6th Prize', group: 'cash', fullWidth: false },
+        { rank: '💰', name: '1,000,000 ETB Cash', value: '1,000,000 ETB', price: 3000, category: 'cash', image: './assets/car/7th.png', badge: '7th Prize', group: 'cash', fullWidth: false },
+        { rank: '💰', name: '500,000 ETB Cash', value: '500,000 ETB', price: 3000, category: 'cash', image: './assets/car/8th.png', badge: '8th Prize', group: 'cash', fullWidth: false },
+        { rank: '💰', name: '300,000 ETB Cash', value: '300,000 ETB', price: 3000, category: 'cash', image: './assets/car/9th.png', badge: '9th Prize', group: 'cash', fullWidth: false },
+        { rank: '💰', name: '200,000 ETB Cash', value: '200,000 ETB', price: 3000, category: 'cash', image: './assets/car/10th.png', badge: '10th Prize', group: 'cash', fullWidth: true }
     ];
 
     window.onload = function() { 
-      loadTickets(); 
-      renderPrizes(); 
-      checkRegistrationStatus();
-      loadAccount(); 
-      loadPaymentAccounts();
-      
-      setTimeout(function() {
-        startHeroSlider(); 
-      }, 300);
-      
-      setInterval(() => {
-        if (document.getElementById('tickets').classList.contains('active')) {
-          apiCall('/tickets').then(result => {
-            if (result.success && result.data) {
-              state.ticketData = result.data.tickets;
-              renderAllTickets();
+        console.log('=== WINDOW ONLOAD ===');
+        console.log('User ID:', currentUser.id);
+        
+        loadTickets(); 
+        renderPrizes(); 
+        checkRegistrationStatus();
+        loadAccount(); 
+        loadPaymentAccounts();
+        
+        setTimeout(function() {
+            startHeroSlider(); 
+        }, 300);
+        
+        setInterval(() => {
+            if (document.getElementById('tickets').classList.contains('active')) {
+                apiCall('/tickets').then(result => {
+                    if (result.success && result.data) {
+                        state.ticketData = result.data.tickets;
+                        renderAllTickets();
+                    }
+                }).catch(() => {});
             }
-          }).catch(() => {});
-        }
-      }, 5000);
+        }, 5000);
     };
 
     function showToast(message, type = 'info') { 
-      const toast = document.getElementById('toast'); 
-      toast.textContent = message; 
-      toast.className = 'toast show ' + type; 
-      clearTimeout(toast._timeout); 
-      toast._timeout = setTimeout(() => { toast.className = 'toast'; }, 3500); 
+        const toast = document.getElementById('toast'); 
+        toast.textContent = message; 
+        toast.className = 'toast show ' + type; 
+        clearTimeout(toast._timeout); 
+        toast._timeout = setTimeout(() => { toast.className = 'toast'; }, 3500); 
     }
     
     function sendToBot(action, data = {}) { 
-      try { 
-        const payload = JSON.stringify({ action, ...data, user_id: currentUser.id }); 
-        if (tg && tg.sendData) tg.sendData(payload); 
-        console.log('📤 Sent to bot:', payload); 
-      } catch (e) { 
-        console.warn('Bot communication error:', e); 
-      } 
+        try { 
+            const payload = JSON.stringify({ action, ...data, user_id: currentUser.id }); 
+            if (tg && tg.sendData) tg.sendData(payload); 
+            console.log('📤 Sent to bot:', payload); 
+        } catch (e) { 
+            console.warn('Bot communication error:', e); 
+        } 
     }
     
     function openPage(pageId, el) { 
-      document.querySelectorAll('.page').forEach(p => p.classList.remove('active')); 
-      document.getElementById(pageId).classList.add('active'); 
-      document.querySelectorAll('.bottom-nav a').forEach(a => a.classList.remove('active')); 
-      if (el) el.classList.add('active'); 
-      
-      if (pageId === 'tickets') { 
-        if (state.ticketData.length > 0) {
-          renderAllTickets();
-        } else {
-          loadTickets();
-        }
-      } 
-      if (pageId === 'account') loadAccount(); 
-      if (pageId === 'register') checkRegistrationStatus();
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active')); 
+        document.getElementById(pageId).classList.add('active'); 
+        document.querySelectorAll('.bottom-nav a').forEach(a => a.classList.remove('active')); 
+        if (el) el.classList.add('active'); 
+        
+        if (pageId === 'tickets') { 
+            if (state.ticketData.length > 0) {
+                renderAllTickets();
+            } else {
+                loadTickets();
+            }
+        } 
+        if (pageId === 'account') loadAccount(); 
+        if (pageId === 'register') checkRegistrationStatus();
     }
 
     async function apiCall(endpoint, method = 'GET', data = null) {
-      try {
-        const options = { method: method, headers: { 'Content-Type': 'application/json' } };
-        if (data) options.body = JSON.stringify(data);
-        const response = await fetch(`${API_BASE}${endpoint}`, options);
-        if (!response.ok) { 
-          const text = await response.text(); 
-          console.error('API Error:', text.substring(0, 200)); 
-          return { success: false, error: `HTTP ${response.status}` }; 
+        try {
+            const options = { method: method, headers: { 'Content-Type': 'application/json' } };
+            if (data) options.body = JSON.stringify(data);
+            const response = await fetch(`${API_BASE}${endpoint}`, options);
+            if (!response.ok) { 
+                const text = await response.text(); 
+                console.error('API Error:', text.substring(0, 200)); 
+                return { success: false, error: `HTTP ${response.status}` }; 
+            }
+            const result = await response.json(); 
+            return result;
+        } catch (error) { 
+            console.error('API Error:', error); 
+            return { success: false, error: error.message }; 
         }
-        const result = await response.json(); 
-        return result;
-      } catch (error) { 
-        console.error('API Error:', error); 
-        return { success: false, error: error.message }; 
-      }
     }
 
-async function checkRegistrationStatus() {
-    const container = document.getElementById('registrationContainer');
-    if (!container) return;
-    
-    try {
-        const result = await apiCall(`/user/${currentUser.id}`);
+    // ============================================================
+    // CHECK REGISTRATION STATUS - FIXED
+    // ============================================================
+    async function checkRegistrationStatus() {
+        const container = document.getElementById('registrationContainer');
+        if (!container) return;
         
-        // Check if user is registered using the is_registered flag
-        if (result && result.success && result.data) {
-            const data = result.data;
+        try {
+            const result = await apiCall(`/user/${currentUser.id}`);
+            console.log('Registration check response:', result);
             
-            // USE THE is_registered FLAG, not phone_number
-            if (data.is_registered === true) {
-                currentUser.isRegistered = true;
-                currentUser.phone = data.phone_number || 'N/A';
-                currentUser.address = data.address || 'N/A';
-                currentUser.full_name = data.full_name || 'User';
-                currentUser.balance = data.balance || 0;
-                currentUser.totalSpent = data.total_spent || 0;
-                currentUser.tickets = data.tickets || [];
+            if (result && result.success && result.data) {
+                const data = result.data;
                 
-                container.innerHTML = `
-                    <div class="already-registered-box">
-                        <span class="check-icon">✅</span>
-                        <h3>You Are Already Registered!</h3>
-                        <p style="color:var(--text-secondary); margin-top:4px;">
-                            👤 <strong>${data.full_name || 'User'}</strong>
-                        </p>
-                        <p style="color:var(--text-secondary); margin-top:4px;">
-                            📱 <strong>${data.phone_number || 'N/A'}</strong>
-                        </p>
-                        <p style="color:var(--text-muted); font-size:11px; margin-top:4px;">
-                            📍 ${data.address || 'Address not set'}
-                        </p>
-                        <p style="color:var(--text-muted); font-size:11px; margin-top:4px;">
-                            💰 Balance: ${(data.balance || 0).toLocaleString()} ETB
-                        </p>
-                        <p style="color:var(--text-muted); font-size:11px;">
-                            🎫 Tickets: ${(data.tickets || []).length}
-                        </p>
-                        <button class="primary-btn" style="margin-top:12px; width:auto; padding:8px 24px;" onclick="openPage('account', document.querySelectorAll('.bottom-nav a')[4])">
-                            <i class="fas fa-user"></i> View My Account
-                        </button>
-                    </div>
-                `;
+                if (data.is_registered === true) {
+                    currentUser.isRegistered = true;
+                    currentUser.phone = data.phone_number || 'N/A';
+                    currentUser.address = data.address || 'N/A';
+                    currentUser.full_name = data.full_name || 'User';
+                    currentUser.balance = data.balance || 0;
+                    currentUser.totalSpent = data.total_spent || 0;
+                    currentUser.tickets = data.tickets || [];
+                    
+                    container.innerHTML = `
+                        <div class="already-registered-box">
+                            <span class="check-icon">✅</span>
+                            <h3>You Are Already Registered!</h3>
+                            <p style="color:var(--text-secondary); margin-top:4px;">
+                                👤 <strong>${data.full_name || 'User'}</strong>
+                            </p>
+                            <p style="color:var(--text-secondary); margin-top:4px;">
+                                📱 <strong>${data.phone_number || 'N/A'}</strong>
+                            </p>
+                            <p style="color:var(--text-muted); font-size:11px; margin-top:4px;">
+                                📍 ${data.address || 'Address not set'}
+                            </p>
+                            <p style="color:var(--text-muted); font-size:11px; margin-top:4px;">
+                                💰 Balance: ${(data.balance || 0).toLocaleString()} ETB
+                            </p>
+                            <p style="color:var(--text-muted); font-size:11px;">
+                                🎫 Tickets: ${(data.tickets || []).length}
+                            </p>
+                            <button class="primary-btn" style="margin-top:12px; width:auto; padding:8px 24px;" onclick="openPage('account', document.querySelectorAll('.bottom-nav a')[4])">
+                                <i class="fas fa-user"></i> View My Account
+                            </button>
+                        </div>
+                    `;
+                } else {
+                    currentUser.isRegistered = false;
+                    container.innerHTML = `
+                        <div class="registration-box">
+                            <div class="form-group">
+                                <label>👤 Full Name</label>
+                                <input type="text" id="regName" placeholder="e.g. John Doe" value="${currentUser.name || ''}">
+                            </div>
+                            <div class="form-group">
+                                <label>📱 Phone Number</label>
+                                <input type="tel" id="regPhone" placeholder="e.g. 0912345678">
+                            </div>
+                            <div class="form-group">
+                                <label>📍 Physical Address</label>
+                                <input type="text" id="regAddress" placeholder="e.g. Addis Ababa, Bole">
+                            </div>
+                            <button class="primary-btn" onclick="registerUser()"><i class="fas fa-check-circle"></i> Register</button>
+                            <div id="regStatus" class="reg-status"></div>
+                        </div>
+                    `;
+                }
             } else {
                 currentUser.isRegistered = false;
                 container.innerHTML = `
@@ -946,9 +983,8 @@ async function checkRegistrationStatus() {
                     </div>
                 `;
             }
-        } else {
-            // Show registration form on error
-            currentUser.isRegistered = false;
+        } catch (error) {
+            console.error('Registration check error:', error);
             container.innerHTML = `
                 <div class="registration-box">
                     <div class="form-group">
@@ -968,540 +1004,551 @@ async function checkRegistrationStatus() {
                 </div>
             `;
         }
-    } catch (error) {
-        console.error('Registration check error:', error);
-        // Show registration form on error
-        container.innerHTML = `
-            <div class="registration-box">
-                <div class="form-group">
-                    <label>👤 Full Name</label>
-                    <input type="text" id="regName" placeholder="e.g. John Doe" value="${currentUser.name || ''}">
-                </div>
-                <div class="form-group">
-                    <label>📱 Phone Number</label>
-                    <input type="tel" id="regPhone" placeholder="e.g. 0912345678">
-                </div>
-                <div class="form-group">
-                    <label>📍 Physical Address</label>
-                    <input type="text" id="regAddress" placeholder="e.g. Addis Ababa, Bole">
-                </div>
-                <button class="primary-btn" onclick="registerUser()"><i class="fas fa-check-circle"></i> Register</button>
-                <div id="regStatus" class="reg-status"></div>
-            </div>
-        `;
     }
-}
-    // ✅ FIXED: registerUser uses /user/create with correct field names
-   async function registerUser() {
-    const name = document.getElementById('regName').value.trim();
-    const phone = document.getElementById('regPhone').value.trim();
-    const address = document.getElementById('regAddress').value.trim();
-    const statusEl = document.getElementById('regStatus');
+
+    // ============================================================
+    // REGISTER USER - FIXED
+    // ============================================================
+    async function registerUser() {
+        const name = document.getElementById('regName').value.trim();
+        const phone = document.getElementById('regPhone').value.trim();
+        const address = document.getElementById('regAddress').value.trim();
+        const statusEl = document.getElementById('regStatus');
+        
+        if (!name || !phone || !address) { 
+            statusEl.className = 'reg-status error'; 
+            statusEl.textContent = 'Please fill in all fields (Name, Phone, Address).'; 
+            return; 
+        }
+        if (!phone.match(/^09\d{8}$/)) { 
+            statusEl.className = 'reg-status error'; 
+            statusEl.textContent = 'Invalid phone number! Use 09XXXXXXXX format.'; 
+            return; 
+        }
+        
+        statusEl.className = 'reg-status info';
+        statusEl.textContent = '⏳ Registering...';
+        
+        const result = await apiCall('/user/create', 'POST', { 
+            telegram_id: currentUser.id, 
+            phone_number: phone, 
+            address: address, 
+            full_name: name 
+        });
+        
+        if (result && result.success) { 
+            currentUser.phone = phone; 
+            currentUser.address = address; 
+            currentUser.full_name = name;
+            currentUser.isRegistered = true;
+            statusEl.className = 'reg-status success'; 
+            statusEl.textContent = '✅ Registration successful!'; 
+            loadAccount(); 
+            showToast('✅ Registration successful!', 'success');
+            setTimeout(checkRegistrationStatus, 1500);
+        } else { 
+            statusEl.className = 'reg-status error'; 
+            statusEl.textContent = '❌ ' + (result?.error || 'Registration failed'); 
+        }
+    }
+
+    // ============================================================
+    // LOAD ACCOUNT - FIXED
+    // ============================================================
+    async function loadAccount() {
+        try {
+            const result = await apiCall(`/user/${currentUser.id}`);
+            console.log('Account load response:', result);
+            
+            if (result && result.success && result.data) {
+                const data = result.data;
+                
+                // Parse data correctly
+                currentUser.balance = typeof data.balance === 'number' ? data.balance : 0;
+                currentUser.totalSpent = typeof data.total_spent === 'number' ? data.total_spent : 0;
+                currentUser.tickets = Array.isArray(data.tickets) ? data.tickets : [];
+                currentUser.transactions = Array.isArray(data.payments) ? data.payments : [];
+                currentUser.phone = data.phone_number || 'Not set';
+                currentUser.full_name = data.full_name || 'User';
+                currentUser.address = data.address || 'N/A';
+                currentUser.isRegistered = data.is_registered || false;
+                
+                // Update Account Page
+                document.getElementById('accName').textContent = currentUser.full_name;
+                document.getElementById('accId').textContent = currentUser.id;
+                document.getElementById('accPhone').textContent = currentUser.phone;
+                document.getElementById('accBalance').textContent = currentUser.balance.toLocaleString() + ' ETB';
+                document.getElementById('accTickets').textContent = currentUser.tickets.length;
+                document.getElementById('accSpent').textContent = currentUser.totalSpent.toLocaleString() + ' ETB';
+                
+                // Update wallet badge
+                const walletEl = document.getElementById('userWallet');
+                if (walletEl) {
+                    walletEl.innerHTML = '<i class="fas fa-wallet" style="margin-right:4px;"></i> ' + currentUser.balance.toLocaleString() + ' ETB';
+                }
+                document.getElementById('walletAmount').textContent = currentUser.balance.toLocaleString();
+                document.getElementById('refundBalance').textContent = currentUser.balance.toLocaleString() + ' ETB';
+                
+                // Display ticket numbers
+                if (currentUser.tickets && currentUser.tickets.length > 0) {
+                    const ticketNumbers = currentUser.tickets.map(t => `#${t.ticket_number}`).join(', ');
+                    document.getElementById('accTicketNumbers').textContent = ticketNumbers;
+                } else {
+                    document.getElementById('accTicketNumbers').textContent = 'None';
+                }
+                
+                renderMyTicketsSummary();
+            } else {
+                console.warn('No user data returned');
+                setDefaultAccountData();
+            }
+        } catch (error) {
+            console.error('Account load error:', error);
+            setDefaultAccountData();
+        }
+    }
+
+    function setDefaultAccountData() {
+        document.getElementById('accName').textContent = currentUser.name || 'User';
+        document.getElementById('accId').textContent = currentUser.id || 'N/A';
+        document.getElementById('accPhone').textContent = 'Not set';
+        document.getElementById('accBalance').textContent = '0 ETB';
+        document.getElementById('accTickets').textContent = '0';
+        document.getElementById('accSpent').textContent = '0 ETB';
+        document.getElementById('walletAmount').textContent = '0';
+        document.getElementById('refundBalance').textContent = '0 ETB';
+        document.getElementById('accTicketNumbers').textContent = 'None';
+        const walletEl = document.getElementById('userWallet');
+        if (walletEl) {
+            walletEl.innerHTML = '<i class="fas fa-wallet" style="margin-right:4px;"></i> 0 ETB';
+        }
+    }
+
+    // ============================================================
+    // RENDER MY TICKETS SUMMARY
+    // ============================================================
+    function renderMyTicketsSummary() {
+        const box = document.getElementById('myTicketsSummary');
+        if (!currentUser.tickets || currentUser.tickets.length === 0) { 
+            box.innerHTML = 'No active tickets yet.'; 
+            return; 
+        }
+        box.innerHTML = currentUser.tickets.slice(0, 5).map(t => 
+            `<div style="display:flex; justify-content:space-between; margin-bottom:4px; border-bottom:1px solid rgba(255,255,255,0.04); padding-bottom:4px;">
+                <span>Ticket #${t.ticket_number}</span>
+                <span style="color:${t.status === 'sold' ? '#2ecc71' : '#f39c12'};">${t.status}</span>
+            </div>`
+        ).join('');
+    }
+
+    // ============================================================
+    // TOGGLE HISTORY
+    // ============================================================
+    function toggleHistory() {
+        const container = document.getElementById('historyContainer'); 
+        const list = document.getElementById('historyList');
+        if (container.style.display === 'none') { 
+            container.style.display = 'block'; 
+            if (currentUser.transactions.length === 0) { 
+                list.innerHTML = '<p style="font-size:11px; color:var(--text-secondary);">No transactions found.</p>'; 
+            } else { 
+                list.innerHTML = currentUser.transactions.map(tx => 
+                    `<div class="history-item">
+                        <div>
+                            <strong>${tx.amount.toLocaleString()} ETB</strong> (Ticket #${tx.ticket_number})<br>
+                            <span style="color:var(--text-secondary);">${tx.date || 'N/A'}</span>
+                        </div>
+                        <span class="status-badge ${tx.status}">${(tx.status || 'pending').toUpperCase()}</span>
+                    </div>`
+                ).join(''); 
+            } 
+        } else { 
+            container.style.display = 'none'; 
+        }
+    }
+
+    // ============================================================
+    // REQUEST REFUND
+    // ============================================================
+    function requestRefund() { 
+        const box = document.getElementById('refundBox'); 
+        box.style.display = box.style.display === 'none' ? 'block' : 'none'; 
+        if (box.style.display === 'block') { 
+            document.getElementById('refundBalance').textContent = currentUser.balance.toLocaleString() + ' ETB'; 
+        } 
+    }
     
-    if (!name || !phone || !address) { 
-        statusEl.className = 'reg-status error'; 
-        statusEl.textContent = 'Please fill in all fields (Name, Phone, Address).'; 
-        return; 
+    // ============================================================
+    // SUBMIT REFUND
+    // ============================================================
+    async function submitRefund() {
+        const reason = document.getElementById('refundReason').value.trim();
+        if (!reason) { showToast('Please enter a refund reason.', 'error'); return; }
+        if (currentUser.balance <= 0) { showToast('No balance to refund.', 'error'); return; }
+        const result = await apiCall('/refund_request', 'POST', { 
+            telegram_id: currentUser.id, 
+            reason: reason 
+        });
+        if (result.success) { 
+            showToast('✅ Refund request submitted!', 'success'); 
+            document.getElementById('refundBox').style.display = 'none'; 
+            document.getElementById('refundReason').value = ''; 
+        } else { 
+            showToast('❌ ' + (result.error || 'Refund request failed'), 'error'); 
+        }
     }
-    if (!phone.match(/^09\d{8}$/)) { 
-        statusEl.className = 'reg-status error'; 
-        statusEl.textContent = 'Invalid phone number! Use 09XXXXXXXX format.'; 
-        return; 
+
+    // ============================================================
+    // TOGGLE LANGUAGE
+    // ============================================================
+    function toggleLanguage() { 
+        state.lang = state.lang === 'EN' ? 'AM' : 'EN'; 
+        document.getElementById('langBtn').textContent = state.lang; 
+        sendToBot('set_language', { language: state.lang }); 
+        showToast(`Language switched to ${state.lang}`, 'info'); 
     }
-    
-    const result = await apiCall('/user/create', 'POST', { 
-        telegram_id: currentUser.id, 
-        phone_number: phone, 
-        address: address, 
-        full_name: name 
-    });
-    
-    if (result.success) { 
-        currentUser.phone = phone; 
-        currentUser.address = address; 
-        currentUser.full_name = name;
-        currentUser.isRegistered = true;
-        statusEl.className = 'reg-status success'; 
-        statusEl.textContent = '✅ Registration successful!'; 
-        loadAccount(); 
-        showToast('✅ Registration successful!', 'success');
-        setTimeout(checkRegistrationStatus, 1000);
-    } else { 
-        statusEl.className = 'reg-status error'; 
-        statusEl.textContent = '❌ ' + (result.error || 'Registration failed'); 
-    }
-}
+
+    // ============================================================
+    // REST OF THE FUNCTIONS (Hero Slider, Prizes, Tickets, Payment)
+    // ============================================================
     let currentSlide = 0;
     let slideInterval = null;
     
     function startHeroSlider() { 
-      if (slideInterval) {
-        clearInterval(slideInterval);
-        slideInterval = null;
-      }
-      
-      slideInterval = setInterval(() => { 
+        if (slideInterval) {
+            clearInterval(slideInterval);
+            slideInterval = null;
+        }
+        
+        slideInterval = setInterval(() => { 
+            const slides = document.querySelectorAll('.hero-slide'); 
+            const dots = document.querySelectorAll('.slider-dots .dot'); 
+            if (slides.length === 0) return; 
+            
+            slides[currentSlide].classList.remove('active'); 
+            slides[currentSlide].classList.remove('prev');
+            if (dots[currentSlide]) dots[currentSlide].classList.remove('active'); 
+            
+            const nextSlide = (currentSlide + 1) % slides.length; 
+            slides[currentSlide].classList.add('prev');
+            currentSlide = nextSlide; 
+            slides[currentSlide].classList.add('active'); 
+            if (dots[currentSlide]) dots[currentSlide].classList.add('active'); 
+        }, 4500); 
+    }
+    
+    function goToSlide(index) { 
+        if (slideInterval) {
+            clearInterval(slideInterval);
+            slideInterval = null;
+        }
+        
         const slides = document.querySelectorAll('.hero-slide'); 
         const dots = document.querySelectorAll('.slider-dots .dot'); 
-        if (slides.length === 0) return; 
+        if (slides.length === 0) return;
         
         slides[currentSlide].classList.remove('active'); 
         slides[currentSlide].classList.remove('prev');
         if (dots[currentSlide]) dots[currentSlide].classList.remove('active'); 
         
-        const nextSlide = (currentSlide + 1) % slides.length; 
         slides[currentSlide].classList.add('prev');
-        currentSlide = nextSlide; 
+        currentSlide = index; 
         slides[currentSlide].classList.add('active'); 
-        if (dots[currentSlide]) dots[currentSlide].classList.add('active'); 
-      }, 4500); 
-    }
-    
-    function goToSlide(index) { 
-      if (slideInterval) {
-        clearInterval(slideInterval);
-        slideInterval = null;
-      }
-      
-      const slides = document.querySelectorAll('.hero-slide'); 
-      const dots = document.querySelectorAll('.slider-dots .dot'); 
-      if (slides.length === 0) return;
-      
-      slides[currentSlide].classList.remove('active'); 
-      slides[currentSlide].classList.remove('prev');
-      if (dots[currentSlide]) dots[currentSlide].classList.remove('active'); 
-      
-      slides[currentSlide].classList.add('prev');
-      currentSlide = index; 
-      slides[currentSlide].classList.add('active'); 
-      if (dots[currentSlide]) dots[currentSlide].classList.add('active');
-      
-      slideInterval = setInterval(() => { 
-        const slides2 = document.querySelectorAll('.hero-slide'); 
-        const dots2 = document.querySelectorAll('.slider-dots .dot'); 
-        if (slides2.length === 0) return; 
+        if (dots[currentSlide]) dots[currentSlide].classList.add('active');
         
-        slides2[currentSlide].classList.remove('active'); 
-        slides2[currentSlide].classList.remove('prev');
-        if (dots2[currentSlide]) dots2[currentSlide].classList.remove('active'); 
-        
-        const nextSlide = (currentSlide + 1) % slides2.length; 
-        slides2[currentSlide].classList.add('prev');
-        currentSlide = nextSlide; 
-        slides2[currentSlide].classList.add('active'); 
-        if (dots2[currentSlide]) dots2[currentSlide].classList.add('active'); 
-      }, 4500); 
+        slideInterval = setInterval(() => { 
+            const slides2 = document.querySelectorAll('.hero-slide'); 
+            const dots2 = document.querySelectorAll('.slider-dots .dot'); 
+            if (slides2.length === 0) return; 
+            
+            slides2[currentSlide].classList.remove('active'); 
+            slides2[currentSlide].classList.remove('prev');
+            if (dots2[currentSlide]) dots2[currentSlide].classList.remove('active'); 
+            
+            const nextSlide = (currentSlide + 1) % slides2.length; 
+            slides2[currentSlide].classList.add('prev');
+            currentSlide = nextSlide; 
+            slides2[currentSlide].classList.add('active'); 
+            if (dots2[currentSlide]) dots2[currentSlide].classList.add('active'); 
+        }, 4500); 
     }
 
     function renderPrizes() {
-      const grid = document.getElementById('prizeGrid');
-      
-      const top3 = PRIZES_DATA.filter(p => p.group === 'top3');
-      const shop = PRIZES_DATA.filter(p => p.group === 'shop');
-      const cash = PRIZES_DATA.filter(p => p.group === 'cash');
-      
-      let html = '';
-      
-      html += `<div class="prize-group-header"><span class="group-icon">🏆</span> TOP 3 GRAND PRIZES</div>`;
-      top3.forEach(p => {
-        html += `
-          <div class="ekub-card grand" onclick="selectPrize('${p.name}', ${p.price})">
-            <div class="ekub-badge">${p.rank} ${p.badge}</div>
-            <div class="img-container"><img src="${p.image}" alt="${p.name}" onerror="this.src='https://via.placeholder.com/150x110'"></div>
-            <div class="ekub-info">
-              <h3>${p.name}</h3>
-              <div class="ekub-details">Value: <strong>${p.value}</strong></div>
-              <button class="buy-btn">Pick Ticket</button>
-            </div>
-          </div>
-        `;
-      });
-      
-      html += `<div class="prize-group-header"><span class="group-icon">🏪</span> SHOP SPACE</div>`;
-      shop.forEach(p => {
-        html += `
-          <div class="ekub-card shop full-width" onclick="selectPrize('${p.name}', ${p.price})">
-            <div class="ekub-badge">${p.rank} ${p.badge}</div>
-            <div class="img-container"><img src="${p.image}" alt="${p.name}" onerror="this.src='https://via.placeholder.com/150x110'"></div>
-            <div class="ekub-info">
-              <h3>${p.name}</h3>
-              <div class="ekub-details">Value: <strong>${p.value}</strong></div>
-              <button class="buy-btn">Pick Ticket</button>
-            </div>
-          </div>
-        `;
-      });
-      
-      html += `<div class="prize-group-header"><span class="group-icon">💰</span> CASH PRIZES</div>`;
-      cash.forEach((p, index) => {
-        const isLast = index === cash.length - 1;
-        html += `
-          <div class="ekub-card cash ${isLast ? 'full-width' : ''}" onclick="selectPrize('${p.name}', ${p.price})">
-            <div class="ekub-badge">${p.rank} ${p.badge}</div>
-            <div class="img-container"><img src="${p.image}" alt="${p.name}" onerror="this.src='https://via.placeholder.com/150x110'"></div>
-            <div class="ekub-info">
-              <h3>${p.name}</h3>
-              <div class="ekub-details">Value: <strong>${p.value}</strong></div>
-              <button class="buy-btn">Pick Ticket</button>
-            </div>
-          </div>
-        `;
-      });
-      
-      grid.innerHTML = html;
+        const grid = document.getElementById('prizeGrid');
+        
+        const top3 = PRIZES_DATA.filter(p => p.group === 'top3');
+        const shop = PRIZES_DATA.filter(p => p.group === 'shop');
+        const cash = PRIZES_DATA.filter(p => p.group === 'cash');
+        
+        let html = '';
+        
+        html += `<div class="prize-group-header"><span class="group-icon">🏆</span> TOP 3 GRAND PRIZES</div>`;
+        top3.forEach(p => {
+            html += `
+                <div class="ekub-card grand" onclick="selectPrize('${p.name}', ${p.price})">
+                    <div class="ekub-badge">${p.rank} ${p.badge}</div>
+                    <div class="img-container"><img src="${p.image}" alt="${p.name}" onerror="this.src='https://via.placeholder.com/150x110'"></div>
+                    <div class="ekub-info">
+                        <h3>${p.name}</h3>
+                        <div class="ekub-details">Value: <strong>${p.value}</strong></div>
+                        <button class="buy-btn">Pick Ticket</button>
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += `<div class="prize-group-header"><span class="group-icon">🏪</span> SHOP SPACE</div>`;
+        shop.forEach(p => {
+            html += `
+                <div class="ekub-card shop full-width" onclick="selectPrize('${p.name}', ${p.price})">
+                    <div class="ekub-badge">${p.rank} ${p.badge}</div>
+                    <div class="img-container"><img src="${p.image}" alt="${p.name}" onerror="this.src='https://via.placeholder.com/150x110'"></div>
+                    <div class="ekub-info">
+                        <h3>${p.name}</h3>
+                        <div class="ekub-details">Value: <strong>${p.value}</strong></div>
+                        <button class="buy-btn">Pick Ticket</button>
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += `<div class="prize-group-header"><span class="group-icon">💰</span> CASH PRIZES</div>`;
+        cash.forEach((p, index) => {
+            const isLast = index === cash.length - 1;
+            html += `
+                <div class="ekub-card cash ${isLast ? 'full-width' : ''}" onclick="selectPrize('${p.name}', ${p.price})">
+                    <div class="ekub-badge">${p.rank} ${p.badge}</div>
+                    <div class="img-container"><img src="${p.image}" alt="${p.name}" onerror="this.src='https://via.placeholder.com/150x110'"></div>
+                    <div class="ekub-info">
+                        <h3>${p.name}</h3>
+                        <div class="ekub-details">Value: <strong>${p.value}</strong></div>
+                        <button class="buy-btn">Pick Ticket</button>
+                    </div>
+                </div>
+            `;
+        });
+        
+        grid.innerHTML = html;
     }
 
     function selectPrize(name, price) { 
-      state.selectedPrize = name; 
-      state.selectedPrice = price; 
-      state.chosenTickets = []; 
-      document.getElementById('selectedPrizeDisplay').textContent = name; 
-      document.getElementById('selectedPriceDisplay').textContent = price.toLocaleString(); 
-      openPage('tickets', document.querySelectorAll('.bottom-nav a')[2]); 
+        state.selectedPrize = name; 
+        state.selectedPrice = price; 
+        state.chosenTickets = []; 
+        document.getElementById('selectedPrizeDisplay').textContent = name; 
+        document.getElementById('selectedPriceDisplay').textContent = price.toLocaleString(); 
+        openPage('tickets', document.querySelectorAll('.bottom-nav a')[2]); 
     }
 
     async function loadTickets() {
-      document.getElementById('selectedPrizeDisplay').textContent = state.selectedPrize;
-      document.getElementById('selectedPriceDisplay').textContent = state.selectedPrice.toLocaleString();
-      
-      const grid = document.getElementById('ticketGrid');
-      grid.innerHTML = '<div class="loading-spinner"><i class="fas fa-spinner"></i> Loading 20,000 tickets...</div>';
-      
-      const result = await apiCall('/tickets');
-      if (result.success && result.data) {
-        const data = result.data;
-        state.selectedTypeId = data.type_id;
-        state.totalTickets = data.total_slots || 20000;
-        state.ticketData = data.tickets;
-        renderAllTickets();
-        updateStats();
-      } else {
-        grid.innerHTML = '<p style="text-align:center;color:var(--text-secondary);">Failed to load tickets.</p>';
-      }
+        document.getElementById('selectedPrizeDisplay').textContent = state.selectedPrize;
+        document.getElementById('selectedPriceDisplay').textContent = state.selectedPrice.toLocaleString();
+        
+        const grid = document.getElementById('ticketGrid');
+        grid.innerHTML = '<div class="loading-spinner"><i class="fas fa-spinner"></i> Loading 20,000 tickets...</div>';
+        
+        const result = await apiCall('/tickets');
+        if (result.success && result.data) {
+            const data = result.data;
+            state.selectedTypeId = data.type_id;
+            state.totalTickets = data.total_slots || 20000;
+            state.ticketData = data.tickets;
+            renderAllTickets();
+            updateStats();
+        } else {
+            grid.innerHTML = '<p style="text-align:center;color:var(--text-secondary);">Failed to load tickets.</p>';
+        }
     }
 
     function renderAllTickets() {
-      const grid = document.getElementById('ticketGrid');
-      let html = '';
-      for (let i = 0; i < state.ticketData.length; i++) {
-        const ticket = state.ticketData[i];
-        const num = ticket.ticket_number;
-        const status = ticket.status;
-        const isSelected = state.chosenTickets.includes(num);
-        const cls = isSelected ? 'selected' : status;
-        html += `<div class="ticket-cell ${cls}" onclick="toggleTicket(${num})">${num}</div>`;
-      }
-      grid.innerHTML = html;
-      updateStats();
+        const grid = document.getElementById('ticketGrid');
+        let html = '';
+        for (let i = 0; i < state.ticketData.length; i++) {
+            const ticket = state.ticketData[i];
+            const num = ticket.ticket_number;
+            const status = ticket.status;
+            const isSelected = state.chosenTickets.includes(num);
+            const cls = isSelected ? 'selected' : status;
+            html += `<div class="ticket-cell ${cls}" onclick="toggleTicket(${num})">${num}</div>`;
+        }
+        grid.innerHTML = html;
+        updateStats();
     }
 
     function toggleTicket(num) {
-      const ticketObj = state.ticketData.find(t => t.ticket_number === num);
-      if (!ticketObj) return;
-      
-      const status = ticketObj.status;
-      if (status === 'sold') { showToast('Ticket is already sold!', 'error'); return; }
-      if (status === 'pending') { showToast('Ticket is pending approval.', 'info'); return; }
-      
-      const pos = state.chosenTickets.indexOf(num);
-      if (pos > -1) state.chosenTickets.splice(pos, 1);
-      else state.chosenTickets.push(num);
-      renderAllTickets();
+        const ticketObj = state.ticketData.find(t => t.ticket_number === num);
+        if (!ticketObj) return;
+        
+        const status = ticketObj.status;
+        if (status === 'sold') { showToast('Ticket is already sold!', 'error'); return; }
+        if (status === 'pending') { showToast('Ticket is pending approval.', 'info'); return; }
+        
+        const pos = state.chosenTickets.indexOf(num);
+        if (pos > -1) state.chosenTickets.splice(pos, 1);
+        else state.chosenTickets.push(num);
+        renderAllTickets();
     }
 
     function updateStats() {
-      let av = 0, so = 0, pe = 0;
-      state.ticketData.forEach(t => {
-        if (t.status === 'available') av++;
-        else if (t.status === 'sold') so++;
-        else if (t.status === 'pending') pe++;
-      });
-      document.getElementById('countAvailable').textContent = av;
-      document.getElementById('countSold').textContent = so;
-      document.getElementById('countPending').textContent = pe;
-      document.getElementById('countSelected').textContent = state.chosenTickets.length;
-      document.getElementById('selectedCountHeader').textContent = `${state.chosenTickets.length} selected`;
-      document.getElementById('buyCount').textContent = state.chosenTickets.length;
-      
-      const totalAmt = state.chosenTickets.length * state.selectedPrice;
-      document.getElementById('buyAmount').textContent = totalAmt.toLocaleString();
-      document.getElementById('payTotalAmount').textContent = totalAmt.toLocaleString() + ' ETB';
-      document.getElementById('payTicketCount').textContent = state.chosenTickets.length;
-      document.getElementById('proceedBtn').disabled = state.chosenTickets.length === 0;
+        let av = 0, so = 0, pe = 0;
+        state.ticketData.forEach(t => {
+            if (t.status === 'available') av++;
+            else if (t.status === 'sold') so++;
+            else if (t.status === 'pending') pe++;
+        });
+        document.getElementById('countAvailable').textContent = av;
+        document.getElementById('countSold').textContent = so;
+        document.getElementById('countPending').textContent = pe;
+        document.getElementById('countSelected').textContent = state.chosenTickets.length;
+        document.getElementById('selectedCountHeader').textContent = `${state.chosenTickets.length} selected`;
+        document.getElementById('buyCount').textContent = state.chosenTickets.length;
+        
+        const totalAmt = state.chosenTickets.length * state.selectedPrice;
+        document.getElementById('buyAmount').textContent = totalAmt.toLocaleString();
+        document.getElementById('payTotalAmount').textContent = totalAmt.toLocaleString() + ' ETB';
+        document.getElementById('payTicketCount').textContent = state.chosenTickets.length;
+        document.getElementById('proceedBtn').disabled = state.chosenTickets.length === 0;
     }
 
     function quickPick() {
-      const available = [];
-      state.ticketData.forEach(t => { if (t.status === 'available' && !state.chosenTickets.includes(t.ticket_number)) available.push(t.ticket_number); });
-      if (available.length === 0) { showToast('No available tickets!', 'error'); return; }
-      const count = Math.min(5, available.length);
-      for (let i = 0; i < count; i++) { const randIdx = Math.floor(Math.random() * available.length); state.chosenTickets.push(available[randIdx]); available.splice(randIdx, 1); }
-      renderAllTickets(); showToast(`✅ ${count} tickets selected!`, 'success');
+        const available = [];
+        state.ticketData.forEach(t => { if (t.status === 'available' && !state.chosenTickets.includes(t.ticket_number)) available.push(t.ticket_number); });
+        if (available.length === 0) { showToast('No available tickets!', 'error'); return; }
+        const count = Math.min(5, available.length);
+        for (let i = 0; i < count; i++) { const randIdx = Math.floor(Math.random() * available.length); state.chosenTickets.push(available[randIdx]); available.splice(randIdx, 1); }
+        renderAllTickets(); showToast(`✅ ${count} tickets selected!`, 'success');
     }
 
     function clearSelection() { if (state.chosenTickets.length === 0) return; state.chosenTickets = []; renderAllTickets(); showToast('Selection cleared.', 'info'); }
 
     function proceedToPayment() {
-      if (state.chosenTickets.length === 0) { 
-        showToast('Select at least one ticket!', 'error'); 
-        return; 
-      }
-
-      showToast('⏳ Verifying ticket availability...', 'info');
-      
-      apiCall('/tickets').then(result => {
-        if (result.success && result.data) {
-          const freshData = result.data;
-          state.ticketData = freshData.tickets;
-          
-          let soldTickets = [];
-          state.chosenTickets.forEach(num => {
-            const ticketObj = state.ticketData.find(t => t.ticket_number === num);
-            if (ticketObj && ticketObj.status === 'sold') {
-              soldTickets.push(num);
-            }
-          });
-
-          if (soldTickets.length > 0) {
-            state.chosenTickets = state.chosenTickets.filter(num => !soldTickets.includes(num));
-            renderAllTickets();
-            showToast(`⚠️ Ticket #${soldTickets.join(', #')} was just sold! Removed from selection.`, 'error');
-            
-            if (state.chosenTickets.length === 0) {
-              return;
-            }
-          }
-
-          openPage('payment', document.querySelectorAll('.bottom-nav a')[3]);
-        } else {
-          showToast('❌ Failed to verify tickets. Please try again.', 'error');
+        if (state.chosenTickets.length === 0) { 
+            showToast('Select at least one ticket!', 'error'); 
+            return; 
         }
-      }).catch(() => {
-        showToast('❌ Connection error. Please try again.', 'error');
-      });
+
+        showToast('⏳ Verifying ticket availability...', 'info');
+        
+        apiCall('/tickets').then(result => {
+            if (result.success && result.data) {
+                const freshData = result.data;
+                state.ticketData = freshData.tickets;
+                
+                let soldTickets = [];
+                state.chosenTickets.forEach(num => {
+                    const ticketObj = state.ticketData.find(t => t.ticket_number === num);
+                    if (ticketObj && ticketObj.status === 'sold') {
+                        soldTickets.push(num);
+                    }
+                });
+
+                if (soldTickets.length > 0) {
+                    state.chosenTickets = state.chosenTickets.filter(num => !soldTickets.includes(num));
+                    renderAllTickets();
+                    showToast(`⚠️ Ticket #${soldTickets.join(', #')} was just sold! Removed from selection.`, 'error');
+                    
+                    if (state.chosenTickets.length === 0) {
+                        return;
+                    }
+                }
+
+                openPage('payment', document.querySelectorAll('.bottom-nav a')[3]);
+            } else {
+                showToast('❌ Failed to verify tickets. Please try again.', 'error');
+            }
+        }).catch(() => {
+            showToast('❌ Connection error. Please try again.', 'error');
+        });
     }
 
     async function loadPaymentAccounts() {
-      const container = document.getElementById('paymentAccounts');
-      const result = await apiCall('/payment_accounts');
-      if (result.success) { 
-        container.innerHTML = result.data.map(account => 
-          `<div class="bank-option" onclick="selectBank('${account.name}', this)">
-            <span>🏦 ${account.name}</span>
-            <strong>${account.account}</strong>
-          </div>`
-        ).join(''); 
-        const firstOption = container.querySelector('.bank-option'); 
-        if (firstOption) firstOption.classList.add('selected'); 
-      }
+        const container = document.getElementById('paymentAccounts');
+        const result = await apiCall('/payment_accounts');
+        if (result.success) { 
+            container.innerHTML = result.data.map(account => 
+                `<div class="bank-option" onclick="selectBank('${account.name}', this)">
+                    <span>🏦 ${account.name}</span>
+                    <strong>${account.account}</strong>
+                </div>`
+            ).join(''); 
+            const firstOption = container.querySelector('.bank-option'); 
+            if (firstOption) firstOption.classList.add('selected'); 
+        }
     }
 
     function selectBank(bank, el) { 
-      state.selectedBank = bank; 
-      document.querySelectorAll('.bank-option').forEach(b => b.classList.remove('selected')); 
-      el.classList.add('selected'); 
+        state.selectedBank = bank; 
+        document.querySelectorAll('.bank-option').forEach(b => b.classList.remove('selected')); 
+        el.classList.add('selected'); 
     }
     
     function handleFileUpload(input) { 
-      if (input.files && input.files[0]) { 
-        state.uploadedFile = input.files[0]; 
-        document.getElementById('fileName').textContent = '📎 ' + input.files[0].name; 
-        const reader = new FileReader(); 
-        reader.onload = function(e) { 
-          document.getElementById('previewImage').src = e.target.result; 
-          document.getElementById('uploadPreview').classList.add('show'); 
-        }; 
-        reader.readAsDataURL(input.files[0]); 
-        showToast('✅ Receipt uploaded!', 'success'); 
-      } 
-    }
-
-    // ✅ FIXED: submitPayment uses /payments/create
-    async function submitPayment() {
-  const txRef = document.getElementById('txRefInput').value.trim();
-  if (!txRef && !state.uploadedFile) { 
-    showToast('Please provide a transaction reference or upload receipt.', 'error'); 
-    return; 
-  }
-  
-  const totalAmount = state.chosenTickets.length * state.selectedPrice;
-  const firstTicketNumber = state.chosenTickets[0];
-  const ticketObj = state.ticketData.find(t => t.ticket_number === firstTicketNumber);
-  
-  if (!ticketObj) { 
-    showToast('Selected ticket not found!', 'error'); 
-    return; 
-  }
-  
-  // Convert image to base64 if uploaded
-  let screenshotData = '';
-  if (state.uploadedFile) {
-    const reader = new FileReader();
-    screenshotData = await new Promise((resolve) => {
-      reader.onload = function(e) {
-        resolve(e.target.result.split(',')[1]); // Get base64 data
-      };
-      reader.readAsDataURL(state.uploadedFile);
-    });
-  }
-  
-  // ✅ FIXED: Use /payments/create instead of /submit_payment
-  const result = await apiCall('/payments/create', 'POST', { 
-    telegram_id: currentUser.id, 
-    ticket_id: ticketObj.ticket_id, 
-    extracted_ref: txRef,
-    extracted_amount: totalAmount,
-    raw_sms: txRef,
-    screenshot_data: screenshotData
-  });
-  
-  if (result.success) { 
-    showToast(`✅ ${state.chosenTickets.length} ticket(s) submitted! Waiting for admin verification.`, 'success'); 
-    state.chosenTickets = []; 
-    document.getElementById('txRefInput').value = ''; 
-    document.getElementById('fileInput').value = ''; 
-    document.getElementById('fileName').textContent = ''; 
-    document.getElementById('uploadPreview').classList.remove('show'); 
-    renderAllTickets(); 
-    loadAccount(); 
-    openPage('tickets', document.querySelectorAll('.bottom-nav a')[2]); 
-  } else { 
-    showToast('❌ ' + (result.error || 'Payment submission failed'), 'error'); 
-  }
-}
-
-async function loadAccount() {
-    try {
-        const result = await apiCall(`/user/${currentUser.id}`);
-        
-        // Always handle the response, even if success is false
-        if (result && result.data) {
-            const data = result.data;
-            
-            currentUser.balance = data.balance || 0;
-            currentUser.totalSpent = data.total_spent || 0;
-            currentUser.tickets = data.tickets || [];
-            currentUser.transactions = data.payments || [];
-            currentUser.phone = data.phone_number || 'Not set';
-            currentUser.full_name = data.full_name || 'User';
-            currentUser.address = data.address || 'N/A';
-            currentUser.isRegistered = data.is_registered || false;
-            
-            // Update UI elements
-            document.getElementById('accName').textContent = currentUser.full_name;
-            document.getElementById('accId').textContent = currentUser.id;
-            document.getElementById('accPhone').textContent = currentUser.phone;
-            document.getElementById('accBalance').textContent = currentUser.balance.toLocaleString() + ' ETB';
-            document.getElementById('accTickets').textContent = currentUser.tickets.length;
-            document.getElementById('accSpent').textContent = currentUser.totalSpent.toLocaleString() + ' ETB';
-            
-            // Update wallet badge
-            const walletEl = document.getElementById('userWallet');
-            if (walletEl) {
-                walletEl.innerHTML = '<i class="fas fa-wallet" style="margin-right:4px;"></i> ' + currentUser.balance.toLocaleString() + ' ETB';
-            }
-            document.getElementById('walletAmount').textContent = currentUser.balance.toLocaleString();
-            document.getElementById('refundBalance').textContent = currentUser.balance.toLocaleString() + ' ETB';
-            
-            // Display ticket numbers
-            if (currentUser.tickets && currentUser.tickets.length > 0) {
-                const ticketNumbers = currentUser.tickets.map(t => `#${t.ticket_number}`).join(', ');
-                document.getElementById('accTicketNumbers').textContent = ticketNumbers;
-            } else {
-                document.getElementById('accTicketNumbers').textContent = 'None';
-            }
-            
-            renderMyTicketsSummary();
-        } else {
-            // Fallback if no data
-            console.warn('No user data returned');
-            setDefaultAccountData();
-        }
-    } catch (error) {
-        console.error('Account load error:', error);
-        setDefaultAccountData();
-        showToast('⚠️ Error loading account', 'error');
-    }
-}
-
-function setDefaultAccountData() {
-    document.getElementById('accName').textContent = currentUser.name || 'User';
-    document.getElementById('accId').textContent = currentUser.id || 'N/A';
-    document.getElementById('accPhone').textContent = 'Not set';
-    document.getElementById('accBalance').textContent = '0 ETB';
-    document.getElementById('accTickets').textContent = '0';
-    document.getElementById('accSpent').textContent = '0 ETB';
-    document.getElementById('walletAmount').textContent = '0';
-}
-    function renderMyTicketsSummary() {
-    const box = document.getElementById('myTicketsSummary');
-    if (!currentUser.tickets || currentUser.tickets.length === 0) { 
-        box.innerHTML = 'No active tickets yet.'; 
-        return; 
-    }
-    box.innerHTML = currentUser.tickets.slice(0, 5).map(t => 
-        `<div style="display:flex; justify-content:space-between; margin-bottom:4px; border-bottom:1px solid rgba(255,255,255,0.04); padding-bottom:4px;">
-            <span>Ticket #${t.ticket_number}</span>
-            <span style="color:${t.status === 'sold' ? '#2ecc71' : '#f39c12'};">${t.status}</span>
-        </div>`
-    ).join('');
-}
-
-    function toggleHistory() {
-      const container = document.getElementById('historyContainer'); 
-      const list = document.getElementById('historyList');
-      if (container.style.display === 'none') { 
-        container.style.display = 'block'; 
-        if (currentUser.transactions.length === 0) { 
-          list.innerHTML = '<p style="font-size:11px; color:var(--text-secondary);">No transactions found.</p>'; 
-        } else { 
-          list.innerHTML = currentUser.transactions.map(tx => 
-            `<div class="history-item">
-              <div>
-                <strong>${tx.amount.toLocaleString()} ETB</strong> (Ticket #${tx.ticket_number})<br>
-                <span style="color:var(--text-secondary);">${tx.date || 'N/A'}</span>
-              </div>
-              <span class="status-badge ${tx.status}">${(tx.status || 'pending').toUpperCase()}</span>
-            </div>`
-          ).join(''); 
+        if (input.files && input.files[0]) { 
+            state.uploadedFile = input.files[0]; 
+            document.getElementById('fileName').textContent = '📎 ' + input.files[0].name; 
+            const reader = new FileReader(); 
+            reader.onload = function(e) { 
+                document.getElementById('previewImage').src = e.target.result; 
+                document.getElementById('uploadPreview').classList.add('show'); 
+            }; 
+            reader.readAsDataURL(input.files[0]); 
+            showToast('✅ Receipt uploaded!', 'success'); 
         } 
-      } else { 
-        container.style.display = 'none'; 
-      }
     }
 
-    function requestRefund() { 
-      const box = document.getElementById('refundBox'); 
-      box.style.display = box.style.display === 'none' ? 'block' : 'none'; 
-      if (box.style.display === 'block') { 
-        document.getElementById('refundBalance').textContent = currentUser.balance.toLocaleString() + ' ETB'; 
-      } 
+    // ============================================================
+    // SUBMIT PAYMENT - FIXED
+    // ============================================================
+    async function submitPayment() {
+        const txRef = document.getElementById('txRefInput').value.trim();
+        if (!txRef && !state.uploadedFile) { 
+            showToast('Please provide a transaction reference or upload receipt.', 'error'); 
+            return; 
+        }
+        
+        const totalAmount = state.chosenTickets.length * state.selectedPrice;
+        const firstTicketNumber = state.chosenTickets[0];
+        const ticketObj = state.ticketData.find(t => t.ticket_number === firstTicketNumber);
+        
+        if (!ticketObj) { 
+            showToast('Selected ticket not found!', 'error'); 
+            return; 
+        }
+        
+        let screenshotData = '';
+        if (state.uploadedFile) {
+            const reader = new FileReader();
+            screenshotData = await new Promise((resolve) => {
+                reader.onload = function(e) {
+                    resolve(e.target.result.split(',')[1]);
+                };
+                reader.readAsDataURL(state.uploadedFile);
+            });
+        }
+        
+        const result = await apiCall('/payments/create', 'POST', { 
+            telegram_id: currentUser.id, 
+            ticket_id: ticketObj.ticket_id, 
+            extracted_ref: txRef,
+            extracted_amount: totalAmount,
+            raw_sms: txRef,
+            screenshot_data: screenshotData
+        });
+        
+        if (result.success) { 
+            showToast(`✅ ${state.chosenTickets.length} ticket(s) submitted! Waiting for admin verification.`, 'success'); 
+            state.chosenTickets = []; 
+            document.getElementById('txRefInput').value = ''; 
+            document.getElementById('fileInput').value = ''; 
+            document.getElementById('fileName').textContent = ''; 
+            document.getElementById('uploadPreview').classList.remove('show'); 
+            renderAllTickets(); 
+            loadAccount(); 
+            openPage('tickets', document.querySelectorAll('.bottom-nav a')[2]); 
+        } else { 
+            showToast('❌ ' + (result.error || 'Payment submission failed'), 'error'); 
+        }
     }
-    
-    // ✅ FIXED: submitRefund uses /refund_request
-    async function submitRefund() {
-      const reason = document.getElementById('refundReason').value.trim();
-      if (!reason) { showToast('Please enter a refund reason.', 'error'); return; }
-      if (currentUser.balance <= 0) { showToast('No balance to refund.', 'error'); return; }
-      const result = await apiCall('/refund_request', 'POST', { 
-        telegram_id: currentUser.id, 
-        reason: reason 
-      });
-      if (result.success) { 
-        showToast('✅ Refund request submitted!', 'success'); 
-        document.getElementById('refundBox').style.display = 'none'; 
-        document.getElementById('refundReason').value = ''; 
-      } else { 
-        showToast('❌ ' + (result.error || 'Refund request failed'), 'error'); 
-      }
-    }
-
-    function toggleLanguage() { 
-      state.lang = state.lang === 'EN' ? 'AM' : 'EN'; 
-      document.getElementById('langBtn').textContent = state.lang; 
-      sendToBot('set_language', { language: state.lang }); 
-      showToast(`Language switched to ${state.lang}`, 'info'); 
-    }
-  </script>
+</script>
 </body>
 </html>
