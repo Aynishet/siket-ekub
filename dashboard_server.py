@@ -1,7 +1,7 @@
 # dashboard_server.py
 # ============================================================
 # SIKET EKUB - WEBAPP + ADMIN DASHBOARD
-# PostgreSQL ONLY - FIXED
+# PostgreSQL ONLY - COMPLETE FIXED
 # ============================================================
 
 import os
@@ -113,7 +113,7 @@ def get_empty_metrics():
 
 
 # ============================================================
-# DASHBOARD METRICS - FIXED
+# DASHBOARD METRICS
 # ============================================================
 
 def get_dashboard_metrics():
@@ -180,7 +180,7 @@ def get_dashboard_metrics():
         cursor.execute("SELECT COUNT(*) AS count FROM tickets WHERE status = 'refunded'")
         tickets_refunded = cursor.fetchone()["count"]
 
-        # Recent payments - FIXED: use correct column names
+        # Recent payments
         cursor.execute("""
             SELECT
                 p.payment_id,
@@ -205,7 +205,7 @@ def get_dashboard_metrics():
         """)
         recent_payments = fetch_all(cursor)
 
-        # Members list - FIXED: use correct column names
+        # Members list
         cursor.execute("""
             SELECT
                 u.user_id,
@@ -266,7 +266,7 @@ def get_dashboard_metrics():
         """)
         ticket_buyers = fetch_all(cursor)
 
-        # Daily stats - PostgreSQL
+        # Daily stats
         cursor.execute("""
             SELECT
                 DATE(created_at) AS date,
@@ -357,7 +357,7 @@ def serve_assets(path):
 
 
 # ============================================================
-# USER API - FIXED
+# USER API - COMPLETE FIXED
 # ============================================================
 
 @app.route("/api/user/<int:telegram_id>", methods=["GET"])
@@ -368,24 +368,12 @@ def api_get_user(telegram_id):
         if not conn:
             return jsonify({
                 "success": False, 
-                "error": "Database connection failed",
-                "data": {
-                    "telegram_id": telegram_id,
-                    "full_name": "User",
-                    "phone_number": "N/A",
-                    "address": "N/A",
-                    "balance": 0,
-                    "total_spent": 0,
-                    "tickets": [],
-                    "payments": [],
-                    "ticket_count": 0,
-                    "is_registered": False
-                }
-            }), 200  # Return 200 even on error
+                "error": "Database connection failed"
+            }), 500
 
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-        # Get user with correct column names
+        # Get user from database
         cursor.execute("""
             SELECT
                 user_id,
@@ -487,9 +475,82 @@ def api_get_user(telegram_id):
                 "ticket_count": 0,
                 "is_registered": False
             }
-        }), 200  # Return 200 so frontend doesn't break
+        }), 200
     finally:
         safe_close(conn)
+
+
+# ============================================================
+# USER BY USERNAME (ALTERNATIVE)
+# ============================================================
+
+@app.route("/api/user/by_username/<string:username>", methods=["GET"])
+def api_get_user_by_username(username):
+    """Get user by username (alternative lookup)"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"success": False, "error": "Database connection failed"}), 500
+
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+        cursor.execute("""
+            SELECT
+                user_id,
+                telegram_id,
+                COALESCE(full_name, 'User') AS full_name,
+                COALESCE(phone_number, 'N/A') AS phone_number,
+                COALESCE(address, 'N/A') AS address,
+                COALESCE(balance, 0) AS balance,
+                COALESCE(total_spent, 0) AS total_spent,
+                created_at AS registration_date,
+                language
+            FROM users
+            WHERE full_name ILIKE %s
+            LIMIT 1
+        """, (f"%{username}%",))
+        
+        user = cursor.fetchone()
+        
+        if not user:
+            return jsonify({
+                "success": True,
+                "data": {
+                    "telegram_id": None,
+                    "full_name": username,
+                    "phone_number": "N/A",
+                    "address": "N/A",
+                    "balance": 0,
+                    "total_spent": 0,
+                    "tickets": [],
+                    "payments": [],
+                    "ticket_count": 0,
+                    "is_registered": False
+                }
+            }), 200
+
+        return jsonify({
+            "success": True,
+            "data": {
+                "user_id": user.get("user_id"),
+                "telegram_id": user.get("telegram_id"),
+                "full_name": user.get("full_name") or "User",
+                "phone_number": user.get("phone_number") or "N/A",
+                "address": user.get("address") or "N/A",
+                "balance": float(user.get("balance") or 0),
+                "total_spent": float(user.get("total_spent") or 0),
+                "is_registered": True
+            }
+        }), 200
+
+    except Exception as exc:
+        logger.exception("Error getting user by username: %s", exc)
+        return jsonify({"success": False, "error": str(exc)}), 500
+    finally:
+        safe_close(conn)
+
+
 # ============================================================
 # CREATE USER
 # ============================================================
@@ -533,7 +594,11 @@ def api_create_user():
         user_id = cursor.fetchone()["user_id"]
         conn.commit()
 
-        return jsonify({"success": True, "user_id": user_id, "message": "User created successfully"})
+        return jsonify({
+            "success": True, 
+            "user_id": user_id, 
+            "message": "User created successfully"
+        })
 
     except Exception as exc:
         if conn:
@@ -656,7 +721,7 @@ def api_assign_ticket():
 
 
 # ============================================================
-# CREATE PAYMENT - FIXED
+# CREATE PAYMENT
 # ============================================================
 
 @app.route("/api/payments/create", methods=["POST"])
@@ -749,7 +814,7 @@ def api_create_payment():
                 "payment_id": existing_payment["payment_id"]
             }), 409
 
-        # Create payment - FIXED: use correct column names
+        # Create payment
         cursor.execute("""
             INSERT INTO payments (
                 user_id, telegram_id, phone_number, full_name,
@@ -901,7 +966,7 @@ def api_payment_screenshot(payment_id):
 
 
 # ============================================================
-# APPROVE / REJECT PAYMENT - FIXED
+# APPROVE / REJECT PAYMENT
 # ============================================================
 
 @app.route("/api/payments/verify", methods=["POST"])
@@ -991,7 +1056,7 @@ def api_verify_payment():
                 conn.rollback()
                 return jsonify({"success": False, "error": "Could not approve payment"}), 409
 
-            # User balance - FIXED: use correct column names
+            # User balance
             cursor.execute("""
                 UPDATE users
                 SET balance = COALESCE(balance, 0) + %s,
