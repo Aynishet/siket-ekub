@@ -1496,7 +1496,7 @@ async def admin_add_user_address(message: Message, state: FSMContext):
         await message.answer(f"❌ Error: {e}", reply_markup=admin_menu(uid))
     
     await state.clear()
-@router.message(F.text.in_(REFUND_TEXTS))
+# @router.message(F.text.in_(REFUND_TEXTS))
 @router.message(F.text.in_(UPDATE_USER_TEXTS))
 async def admin_update_user(message: Message, state: FSMContext):
     uid = message.from_user.id
