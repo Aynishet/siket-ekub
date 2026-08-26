@@ -78,7 +78,7 @@ async def get_db_pool():
     return db_pool
 
 # =====================================================
-# DATABASE HELPER - FIXED
+# DATABASE HELPER
 # =====================================================
 class DatabaseHelper:
     @staticmethod
@@ -123,12 +123,11 @@ class DatabaseHelper:
                 return True
 
 # =====================================================
-# INIT DATABASE - WITH ALL COLUMNS
+# INIT DATABASE
 # =====================================================
 async def init_db_postgres():
     pool = await get_db_pool()
     async with pool.acquire() as conn:
-        # Users table
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 user_id SERIAL PRIMARY KEY,
@@ -145,7 +144,6 @@ async def init_db_postgres():
             )
         """)
         
-        # Tickets table - WITH ALL COLUMNS
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS tickets (
                 ticket_id SERIAL PRIMARY KEY,
@@ -161,7 +159,6 @@ async def init_db_postgres():
             )
         """)
         
-        # Payments table
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS payments (
                 payment_id SERIAL PRIMARY KEY,
@@ -185,7 +182,6 @@ async def init_db_postgres():
             )
         """)
         
-        # Refunds table
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS refunds (
                 refund_id SERIAL PRIMARY KEY,
@@ -201,7 +197,6 @@ async def init_db_postgres():
             )
         """)
         
-        # Indexes
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_payments_telegram_id ON payments(telegram_id)")
@@ -210,7 +205,7 @@ async def init_db_postgres():
         logger.info("✅ PostgreSQL tables ready")
 
 # =====================================================
-# GENERATE TICKETS - FIXED
+# GENERATE TICKETS
 # =====================================================
 async def generate_tickets():
     try:
@@ -474,7 +469,7 @@ class AdminState(StatesGroup):
     manual_ticket = State()
 
 # =====================================================
-# DATABASE HELPERS - FIXED
+# DATABASE HELPERS
 # =====================================================
 
 async def get_user(tid: int):
@@ -874,7 +869,7 @@ async def process_block_selection(message: Message, state: FSMContext):
     await state.set_state(BuyState.payment)
 
 # =====================================================
-# PAYMENT PROCESSING - FIXED
+# PAYMENT PROCESSING
 # =====================================================
 
 @router.message(BuyState.payment, F.photo | F.text)
@@ -904,7 +899,6 @@ async def process_payment(message: Message, state: FSMContext):
     phone = user[3] or "N/A"
     name = user[2] or "User"
     
-    # Lock the ticket
     locked = await lock_ticket(ticket_id, user_id, uid, phone, name)
     
     if "UPDATE 0" in str(locked):
@@ -928,7 +922,6 @@ async def process_payment(message: Message, state: FSMContext):
     await state.clear()
     await message.answer(get_text(uid, "pay_submitted"), reply_markup=user_menu(uid))
     
-    # Notify admins
     for admin in ADMIN_IDS:
         try:
             msg = f"🔔 New Payment\n🎫 Ticket #{ticket_num}\n👤 {name}\n📱 {phone}\n🆔 {payment_id}"
@@ -975,7 +968,6 @@ async def approve_pay(callback: CallbackQuery):
     
     user_id = user[0]
     
-    # Assign ticket
     assigned = await assign_ticket(ticket_id, user_id, tg_id, phone, name)
     
     if "UPDATE 0" in str(assigned):
@@ -984,13 +976,11 @@ async def approve_pay(callback: CallbackQuery):
         await callback.answer()
         return
     
-    # Update payment and user
     await DatabaseHelper.execute_transaction([
         ("UPDATE payments SET status = 'approved', verified_by = $1, verified_at = CURRENT_TIMESTAMP WHERE payment_id = $2", uid, payment_id),
         ("UPDATE users SET balance = COALESCE(balance, 0) + 3000, total_spent = COALESCE(total_spent, 0) + 3000 WHERE telegram_id = $1", tg_id)
     ])
     
-    # Notify channel
     try:
         await telegram_bot.send_message(
             TICKET_CHANNEL_ID,
@@ -999,7 +989,6 @@ async def approve_pay(callback: CallbackQuery):
     except:
         pass
     
-    # Notify user
     try:
         await telegram_bot.send_message(tg_id, get_text(tg_id, "pay_approved", ticket=ticket_num))
     except:
@@ -1096,7 +1085,6 @@ async def balance_cmd(message: Message):
         await message.answer(get_text(uid, "registration_required"))
         return
     
-    # Get correct values from database
     balance = user[5] if len(user) > 5 else 0
     spent = user[6] if len(user) > 6 else 0
     
@@ -1135,7 +1123,7 @@ async def support_cmd(message: Message):
     await message.answer(get_text(uid, "support_info", channel=SUPPORT_CHANNEL_LINK), reply_markup=kb)
 
 # =====================================================
-# ADMIN COMMANDS - ALL FIXED
+# ADMIN COMMANDS
 # =====================================================
 
 @router.message(F.text == "🛠️ Admin Panel")
