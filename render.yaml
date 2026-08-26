@@ -14,7 +14,12 @@ services:
         value: 8929371440:AAH7DFvko6YC98FtImSsgvVWn_Kqcl3pDRk
       - key: ADMIN_IDS
         value: "699428281,1029660827"
-      
+            - key: PORT
+        value: "10000"
+      - key: DASHBOARD_PORT
+        value: "10001"
+      - key: WEB_CONCURRENCY
+        value: "1"
       # ====== PYTHON VERSION ======
       - key: PYTHON_VERSION
         value: 3.12.0
