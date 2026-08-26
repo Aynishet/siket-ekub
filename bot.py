@@ -1676,11 +1676,116 @@ async def admin_update_user_id(message: Message, state: FSMContext):
     )
     await state.set_state(AdminState.update_user_field)
 
+@router.message(AdminState.update_user_field)
+async def admin_update_user_field_debug(message: Message, state: FSMContext):
+    """Catch-all for update_user_field state"""
+    uid = message.from_user.id
+    if uid not in ADMIN_IDS:
+        return
+    
+    print(f"🔍 DEBUG - State: AdminState.update_user_field")
+    print(f"🔍 DEBUG - Message: '{message.text}'")
+    
+    # Check if it's in the field_map
+    field_map = {
+        "✏️ Name": "full_name",
+        "✏️ Phone": "phone_number",
+        "✏️ Address": "address"
+    }
+    
+    if message.text in field_map:
+        await state.update_data(field=field_map[message.text])
+        field_name = message.text.replace("✏️ ", "")
+        await message.answer(f"📝 Enter new {field_name}:")
+        await state.set_state(AdminState.update_user_value)
+    elif message.text == "❌ Cancel":
+        await state.clear()
+        await message.answer("❌ Cancelled.", reply_markup=admin_menu(uid))
+    else:
+        await message.answer(
+            "❌ Please select from the keyboard:\n"
+            "✏️ Name\n"
+            "✏️ Phone\n"
+            "✏️ Address",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[
+                    [KeyboardButton(text="✏️ Name"), KeyboardButton(text="✏️ Phone")],
+                    [KeyboardButton(text="✏️ Address"), KeyboardButton(text="❌ Cancel")],
+                ],
+                resize_keyboard=True
+            )
+        )
+@router.message(F.text.in_(UPDATE_USER_TEXTS))
+async def admin_update_user(message: Message, state: FSMContext):
+    uid = message.from_user.id
+    if uid not in ADMIN_IDS:
+        return
+    
+    await message.answer(
+        "✏️ **Update User**\n\n"
+        "Enter the user's Telegram ID:\n"
+        "(e.g., 123456789)\n\n"
+        "Type ❌ Cancel to cancel.",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="❌ Cancel")]],
+            resize_keyboard=True
+        ),
+        parse_mode="Markdown"
+    )
+    await state.set_state(AdminState.update_user_id)
+
+@router.message(AdminState.update_user_id, F.text)
+async def admin_update_user_id(message: Message, state: FSMContext):
+    uid = message.from_user.id
+    if uid not in ADMIN_IDS:
+        return
+    
+    if message.text == "❌ Cancel":
+        await state.clear()
+        await message.answer("❌ Cancelled.", reply_markup=admin_menu(uid))
+        return
+    
+    try:
+        telegram_id = int(message.text.strip())
+    except:
+        await message.answer("❌ Invalid ID. Please enter a number.")
+        return
+    
+    user = await get_user(telegram_id)
+    if not user:
+        await message.answer(f"❌ User {telegram_id} not found!", reply_markup=admin_menu(uid))
+        await state.clear()
+        return
+    
+    await state.update_data(telegram_id=telegram_id)
+    
+    kb = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="✏️ Name"), KeyboardButton(text="✏️ Phone")],
+            [KeyboardButton(text="✏️ Address"), KeyboardButton(text="❌ Cancel")],
+        ],
+        resize_keyboard=True
+    )
+    
+    await message.answer(
+        f"👤 **Current Info:**\n\n"
+        f"🆔 {telegram_id}\n"
+        f"👤 {user[2] or 'N/A'}\n"
+        f"📱 {user[3] or 'N/A'}\n"
+        f"📍 {user[4] or 'N/A'}\n\n"
+        f"**What would you like to update?**",
+        reply_markup=kb,
+        parse_mode="Markdown"
+    )
+    await state.set_state(AdminState.update_user_field)
+
 @router.message(AdminState.update_user_field, F.text)
 async def admin_update_user_field(message: Message, state: FSMContext):
     uid = message.from_user.id
     if uid not in ADMIN_IDS:
         return
+    
+    print(f"🔍 Update field: '{message.text}'")  # Debug
     
     if message.text == "❌ Cancel":
         await state.clear()
@@ -1694,7 +1799,25 @@ async def admin_update_user_field(message: Message, state: FSMContext):
     }
     
     if message.text not in field_map:
-        await message.answer("❌ Select a valid option.")
+        # Try to match without emoji
+        clean_text = message.text.replace("✏️ ", "").strip()
+        for key, value in field_map.items():
+            if clean_text == key.replace("✏️ ", "").strip():
+                await state.update_data(field=value)
+                await message.answer(f"📝 Enter new {clean_text}:")
+                await state.set_state(AdminState.update_user_value)
+                return
+        
+        await message.answer(
+            "❌ Please select from the keyboard below:",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[
+                    [KeyboardButton(text="✏️ Name"), KeyboardButton(text="✏️ Phone")],
+                    [KeyboardButton(text="✏️ Address"), KeyboardButton(text="❌ Cancel")],
+                ],
+                resize_keyboard=True
+            )
+        )
         return
     
     await state.update_data(field=field_map[message.text])
