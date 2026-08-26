@@ -842,7 +842,7 @@ async def buy_ticket(message: Message, state: FSMContext):
     )
  
 
-@router.message(F.text.in_(MY_TICKETS_TEXTS + MY_TICKETS_TEXTS_ALT))
+@router.message(F.text.in_(MY_TICKETS_TEXTS + MY_TICKETS_TEXTS))
 async def my_tickets_cmd(message: Message):
     uid = message.from_user.id
     user = await get_user(uid)
