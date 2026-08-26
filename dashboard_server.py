@@ -113,7 +113,7 @@ def get_empty_metrics():
 
 
 # ============================================================
-# DASHBOARD METRICS
+# DASHBOARD METRICS - FIXED COLUMN NAMES
 # ============================================================
 
 def get_dashboard_metrics():
@@ -205,7 +205,7 @@ def get_dashboard_metrics():
                 u.phone_number,
                 u.full_name,
                 u.address,
-                u.created_at as registration_date,
+                u.registration_date,
                 COALESCE(u.balance, 0) AS balance,
                 COALESCE(u.total_spent, 0) AS total_spent,
                 COALESCE(
@@ -225,7 +225,7 @@ def get_dashboard_metrics():
             FROM users u
             LEFT JOIN payments p ON u.user_id = p.user_id
             GROUP BY u.user_id, u.telegram_id, u.phone_number, u.full_name,
-                     u.address, u.created_at, u.balance, u.total_spent
+                     u.address, u.registration_date, u.balance, u.total_spent
             ORDER BY total_paid DESC
             LIMIT 100
         """)
@@ -363,7 +363,7 @@ def api_get_user(telegram_id):
 
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-        # Get user by telegram_id
+        # Get user by telegram_id - FIXED: use registration_date
         cursor.execute("""
             SELECT
                 user_id,
@@ -373,7 +373,7 @@ def api_get_user(telegram_id):
                 COALESCE(address, 'N/A') AS address,
                 COALESCE(balance, 0) AS balance,
                 COALESCE(total_spent, 0) AS total_spent,
-                created_at AS registration_date,
+                registration_date,
                 language
             FROM users
             WHERE telegram_id = %s
@@ -382,7 +382,6 @@ def api_get_user(telegram_id):
         
         user = cursor.fetchone()
         
-        # If user not found, return default data with is_registered=False
         if not user:
             return jsonify({
                 "success": True,
@@ -671,7 +670,6 @@ def api_create_payment():
 
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-        # Get user
         cursor.execute("""
             SELECT user_id, telegram_id, phone_number, full_name
             FROM users
@@ -685,7 +683,6 @@ def api_create_payment():
 
         user_id = user["user_id"]
 
-        # Lock ticket
         cursor.execute("""
             SELECT ticket_id, ticket_number, status, user_id, telegram_id
             FROM tickets
@@ -717,7 +714,6 @@ def api_create_payment():
             conn.rollback()
             return jsonify({"success": False, "error": f"Ticket #{ticket_number} is no longer available"}), 409
 
-        # Check duplicate pending payment
         cursor.execute("""
             SELECT payment_id FROM payments
             WHERE ticket_id = %s AND status = 'pending'
@@ -733,7 +729,6 @@ def api_create_payment():
                 "payment_id": existing_payment["payment_id"]
             }), 409
 
-        # Create payment
         cursor.execute("""
             INSERT INTO payments (
                 user_id, telegram_id, phone_number, full_name,
