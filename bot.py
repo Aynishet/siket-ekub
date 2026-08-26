@@ -1,11 +1,10 @@
 # =====================================================
-# BOT.PY - SIKET EKUB COMPLETE - ALL MENUS FIXED
+# BOT.PY - SIKET EKUB COMPLETE - FULLY FIXED
 # =====================================================
 
 import sys
 import os
 import logging
-import asyncio
 import random
 import io
 import ssl
@@ -123,11 +122,12 @@ class DatabaseHelper:
                 return True
 
 # =====================================================
-# INIT DATABASE
+# INIT DATABASE - FIXED WITH ALL COLUMNS
 # =====================================================
 async def init_db_postgres():
     pool = await get_db_pool()
     async with pool.acquire() as conn:
+        # Users table
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 user_id SERIAL PRIMARY KEY,
@@ -144,6 +144,7 @@ async def init_db_postgres():
             )
         """)
         
+        # Tickets table
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS tickets (
                 ticket_id SERIAL PRIMARY KEY,
@@ -159,6 +160,7 @@ async def init_db_postgres():
             )
         """)
         
+        # Payments table - FIXED with all columns
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS payments (
                 payment_id SERIAL PRIMARY KEY,
@@ -182,6 +184,7 @@ async def init_db_postgres():
             )
         """)
         
+        # Refunds table
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS refunds (
                 refund_id SERIAL PRIMARY KEY,
@@ -197,6 +200,7 @@ async def init_db_postgres():
             )
         """)
         
+        # Create indexes
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_payments_telegram_id ON payments(telegram_id)")
@@ -211,6 +215,7 @@ async def generate_tickets():
     try:
         pool = await get_db_pool()
         async with pool.acquire() as conn:
+            # Fix columns if needed
             try:
                 await conn.execute("ALTER TABLE tickets ALTER COLUMN type_id DROP NOT NULL")
             except:
@@ -223,6 +228,22 @@ async def generate_tickets():
             
             try:
                 await conn.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS ticket_code VARCHAR(50)")
+            except:
+                pass
+            
+            # Fix payments columns
+            try:
+                await conn.execute("ALTER TABLE payments ADD COLUMN IF NOT EXISTS full_name VARCHAR(255)")
+            except:
+                pass
+            
+            try:
+                await conn.execute("ALTER TABLE payments ADD COLUMN IF NOT EXISTS phone_number VARCHAR(20)")
+            except:
+                pass
+            
+            try:
+                await conn.execute("ALTER TABLE payments ADD COLUMN IF NOT EXISTS amount DECIMAL(15,2) DEFAULT 3000")
             except:
                 pass
             
@@ -320,6 +341,13 @@ TEXTS = {
         "back_user": "🔙 Back to User",
         "no_users": "📭 No users found.",
         "registration_required": "❌ Please /start first to register.",
+        "user_not_found": "❌ User not found!",
+        "user_already_registered": "✅ User already registered!",
+        "user_added": "✅ User added successfully!",
+        "enter_user_id": "📝 Enter user Telegram ID:",
+        "enter_ticket_number": "📝 Enter ticket number (or 'random'):",
+        "ticket_assigned": "✅ Ticket #{ticket} assigned to user!",
+        "ticket_already_sold": "❌ Ticket already sold!",
     },
     "am": {
         "welcome": "🎰 እንኳን ወደ ስኬት እቁብ በደህና መጡ!",
@@ -377,6 +405,13 @@ TEXTS = {
         "back_user": "🔙 ወደ ተጠቃሚ",
         "no_users": "📭 ምንም ተጠቃሚ የለም።",
         "registration_required": "❌ እባክዎ ለመመዝገብ /start ይጫኑ።",
+        "user_not_found": "❌ ተጠቃሚ አልተገኘም!",
+        "user_already_registered": "✅ ተጠቃሚው ቀድሞውኑ ተመዝግቧል!",
+        "user_added": "✅ ተጠቃሚ ተጨምሯል!",
+        "enter_user_id": "📝 የተጠቃሚውን ቴሌግራም መታወቂያ ያስገቡ:",
+        "enter_ticket_number": "📝 የቲኬት ቁጥር ያስገቡ (ወይም 'random'):",
+        "ticket_assigned": "✅ ቲኬት #{ticket} ለተጠቃሚ ተመድቧል!",
+        "ticket_already_sold": "❌ ቲኬቱ ቀድሞውኑ ተሽጧል!",
     }
 }
 
@@ -403,7 +438,7 @@ def get_text(user_id: int, key: str, **kwargs) -> str:
     return text.format(**kwargs) if kwargs else text
 
 # =====================================================
-# KEYBOARDS - EXACT TEXT MATCH
+# KEYBOARDS
 # =====================================================
 
 def choice_menu() -> ReplyKeyboardMarkup:
@@ -516,7 +551,7 @@ async def get_all_users():
 
 async def get_pending_payments():
     return await DatabaseHelper.fetch(
-        "SELECT p.payment_id, p.telegram_id, p.ticket_number, p.full_name, p.phone_number, p.created_at, u.user_id FROM payments p LEFT JOIN users u ON p.telegram_id = u.telegram_id WHERE p.status = 'pending' ORDER BY p.created_at DESC"
+        "SELECT payment_id, telegram_id, ticket_number, full_name, phone_number, created_at FROM payments WHERE status = 'pending' ORDER BY created_at DESC"
     )
 
 async def get_user_ticket_count(telegram_id: int):
@@ -868,7 +903,7 @@ async def process_block_selection(message: Message, state: FSMContext):
     await state.set_state(BuyState.payment)
 
 # =====================================================
-# PAYMENT PROCESSING
+# PAYMENT PROCESSING - FIXED
 # =====================================================
 
 @router.message(BuyState.payment, F.photo | F.text)
@@ -898,6 +933,7 @@ async def process_payment(message: Message, state: FSMContext):
     phone = user[3] or "N/A"
     name = user[2] or "User"
     
+    # Lock the ticket
     locked = await lock_ticket(ticket_id, user_id, uid, phone, name)
     
     if "UPDATE 0" in str(locked):
@@ -912,6 +948,7 @@ async def process_payment(message: Message, state: FSMContext):
         downloaded = await telegram_bot.download_file(file.file_path)
         screenshot = base64.b64encode(downloaded.read()).decode('utf-8')
     
+    # Insert payment with all columns
     result = await DatabaseHelper.execute(
         "INSERT INTO payments (user_id, telegram_id, phone_number, full_name, ticket_id, ticket_number, amount, status, screenshot_data) VALUES ($1, $2, $3, $4, $5, $6, 3000, 'pending', $7) RETURNING payment_id",
         user_id, uid, phone, name, ticket_id, ticket_num, screenshot
@@ -921,6 +958,7 @@ async def process_payment(message: Message, state: FSMContext):
     await state.clear()
     await message.answer(get_text(uid, "pay_submitted"), reply_markup=user_menu(uid))
     
+    # Notify admins
     for admin in ADMIN_IDS:
         try:
             msg = f"🔔 New Payment\n🎫 Ticket #{ticket_num}\n👤 {name}\n📱 {phone}\n🆔 {payment_id}"
@@ -1122,7 +1160,7 @@ async def support_cmd(message: Message):
     await message.answer(get_text(uid, "support_info", channel=SUPPORT_CHANNEL_LINK), reply_markup=kb)
 
 # =====================================================
-# ADMIN COMMANDS - ALL WORKING
+# ADMIN COMMANDS
 # =====================================================
 
 @router.message(F.text == "🛠️ Admin Panel")
@@ -1411,7 +1449,7 @@ async def admin_buy_user(message: Message, state: FSMContext):
     if uid not in ADMIN_IDS:
         return
     
-    await message.answer("📝 Enter user Telegram ID:", reply_markup=ReplyKeyboardMarkup(
+    await message.answer(get_text(uid, "enter_user_id"), reply_markup=ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="🔙 Back to User")]], resize_keyboard=True
     ))
     await state.set_state(AdminState.buy_user_id)
@@ -1443,7 +1481,7 @@ async def admin_buy_user_id(message: Message, state: FSMContext):
         await message.answer(f"✅ User {target_id} created automatically!")
     
     await state.update_data(target_user=target_id)
-    await message.answer("📝 Enter ticket number (or 'random'):")
+    await message.answer(get_text(uid, "enter_ticket_number"))
     await state.set_state(AdminState.buy_ticket_num)
 
 @router.message(AdminState.buy_ticket_num, F.text)
@@ -1474,7 +1512,7 @@ async def admin_buy_ticket(message: Message, state: FSMContext):
     ticket_id, ticket_num = ticket
     user = await get_user(target_id)
     if not user:
-        await message.answer("❌ User not found!")
+        await message.answer(get_text(uid, "user_not_found"))
         return
     
     user_id = user[0]
