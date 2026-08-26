@@ -501,6 +501,9 @@ OPEN_WEB_TEXTS = ["🌐 Open Web", "🌐 የድር ገጽ ይክፈቱ"]
 ABOUT_TEXTS = ["ℹ️ About", "ℹ️ ስለ ስኬት እቁብ"]
 
 # User Menu
+# Make sure these match EXACTLY what the button shows
+# MY_TICKETS_TEXTS = ["🎫 My Tickets", "🎫 ቲኬቶቼ"]
+
 BUY_TICKET_TEXTS = ["🎯 Buy Ticket", "🎯 ቲኬት ይግዙ"]
 MY_TICKETS_TEXTS = ["🎫 My Tickets", "🎫 ቲኬቶቼ"]
 BALANCE_TEXTS = ["💰 Balance", "💰 ቀሪ ሂሳብ"]
@@ -837,8 +840,9 @@ async def buy_ticket(message: Message, state: FSMContext):
         get_text(uid, "pick_ticket"),
         reply_markup=buy_menu(uid)
     )
+ 
 
-@router.message(F.text.in_(MY_TICKETS_TEXTS))
+@router.message(F.text.in_(MY_TICKETS_TEXTS + MY_TICKETS_TEXTS_ALT))
 async def my_tickets_cmd(message: Message):
     uid = message.from_user.id
     user = await get_user(uid)
@@ -846,7 +850,9 @@ async def my_tickets_cmd(message: Message):
         await message.answer(get_text(uid, "registration_required"))
         return
     
-    # Use direct database query to ensure correct data
+    # Just send a test response to confirm it's working
+    await message.answer("✅ My Tickets handler is working! Loading your tickets...")
+    
     tickets = await DatabaseHelper.fetch(
         "SELECT ticket_number, assigned_at, status FROM tickets WHERE telegram_id = $1 ORDER BY ticket_number",
         uid
@@ -857,28 +863,16 @@ async def my_tickets_cmd(message: Message):
         return
     
     total = len(tickets)
-    sold = 0
-    pending = 0
-    
-    # Count statuses safely
-    for t in tickets:
-        status = t[2] if len(t) > 2 else 'unknown'
-        if status == 'sold':
-            sold += 1
-        elif status == 'pending':
-            pending += 1
+    sold = sum(1 for t in tickets if t[2] == 'sold')
+    pending = sum(1 for t in tickets if t[2] == 'pending')
     
     text = get_text(uid, "your_tickets", count=total)
     text += f"📊 Sold: {sold}, Pending: {pending}\n\n"
     
     for ticket in tickets[:20]:
-        num = ticket[0] if len(ticket) > 0 else 'N/A'
-        date = ticket[1] if len(ticket) > 1 else None
-        status = ticket[2] if len(ticket) > 2 else 'unknown'
-        
+        num, date, status = ticket
         status_icon = "✅" if status == "sold" else "⏳"
-        date_str = date[:10] if date else 'N/A'
-        text += f"{status_icon} #{num} - {date_str}\n"
+        text += f"{status_icon} #{num} - {date[:10] if date else 'N/A'}\n"
     
     if len(tickets) > 20:
         text += f"\n... and {len(tickets)-20} more"
