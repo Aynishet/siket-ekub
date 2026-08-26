@@ -513,6 +513,7 @@ LANG_TEXTS = ["🌍 Language", "🌍 ቋንቋ"]
 BACK_TEXTS = ["🔙 Back", "🔙 ወደ ኋላ"]
 BACK_USER_TEXTS = ["🔙 Back to User", "🔙 ወደ ተጠቃሚ ምናሌ"]
 
+
 # Buy Menu
 RANDOM_TICKET_TEXTS = ["🎲 Random Ticket", "🎲 በዘፈቀደ"]
 TYPE_NUMBER_TEXTS = ["✏️ Type Number", "✏️ ቁጥር ይጻፉ"]
@@ -842,7 +843,7 @@ async def buy_ticket(message: Message, state: FSMContext):
     )
  
 
-@router.message(F.text.in_(MY_TICKETS_TEXTS + MY_TICKETS_TEXTS))
+@router.message(F.text.in_(MY_TICKETS_TEXTS))
 async def my_tickets_cmd(message: Message):
     uid = message.from_user.id
     user = await get_user(uid)
@@ -850,35 +851,42 @@ async def my_tickets_cmd(message: Message):
         await message.answer(get_text(uid, "registration_required"))
         return
     
-    # Just send a test response to confirm it's working
-    await message.answer("✅ My Tickets handler is working! Loading your tickets...")
-    
+    # Check if user has tickets
     tickets = await DatabaseHelper.fetch(
         "SELECT ticket_number, assigned_at, status FROM tickets WHERE telegram_id = $1 ORDER BY ticket_number",
         uid
     )
     
+    # Debug: Check what tickets exist
+    print(f"🔍 Tickets found for user {uid}: {len(tickets)}")
+    
     if not tickets:
-        await message.answer(get_text(uid, "no_tickets_owned"), reply_markup=user_menu(uid))
+        await message.answer(
+            f"📭 You have no tickets yet.\n\nUse 🎯 Buy Ticket to purchase your first ticket!",
+            reply_markup=user_menu(uid)
+        )
         return
     
     total = len(tickets)
     sold = sum(1 for t in tickets if t[2] == 'sold')
     pending = sum(1 for t in tickets if t[2] == 'pending')
     
-    text = get_text(uid, "your_tickets", count=total)
-    text += f"📊 Sold: {sold}, Pending: {pending}\n\n"
+    text = f"🎫 **Your Tickets ({total})**\n\n"
+    text += f"✅ Sold: {sold} | ⏳ Pending: {pending}\n\n"
     
+    # Show tickets
     for ticket in tickets[:20]:
-        num, date, status = ticket
+        num = ticket[0]
+        date = ticket[1]
+        status = ticket[2]
         status_icon = "✅" if status == "sold" else "⏳"
-        text += f"{status_icon} #{num} - {date[:10] if date else 'N/A'}\n"
+        date_str = date[:10] if date else 'N/A'
+        text += f"{status_icon} #{num} - {date_str}\n"
     
     if len(tickets) > 20:
         text += f"\n... and {len(tickets)-20} more"
     
-    await message.answer(text, reply_markup=user_menu(uid))
-
+    await message.answer(text, reply_markup=user_menu(uid), parse_mode="Markdown")
 @router.message(F.text.in_(BALANCE_TEXTS))
 async def balance_cmd(message: Message):
     uid = message.from_user.id
