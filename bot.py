@@ -1586,19 +1586,38 @@ async def main():
     await generate_tickets()
     await set_commands()
     
+    # =====================================================
+    # FIX: Properly handle webhooks and polling
+    # =====================================================
     try:
+        # Delete any existing webhook first
         await telegram_bot.delete_webhook(drop_pending_updates=True)
-    except:
-        pass
+        logger.info("✅ Webhook deleted")
+    except Exception as e:
+        logger.warning(f"Webhook deletion warning: {e}")
     
-    await asyncio.sleep(1)
+    # Wait a moment for cleanup
+    await asyncio.sleep(2)
+    
     dp.include_router(router)
     
     logger.info("🚀 Bot started with PostgreSQL!")
     logger.info(f"👤 Admins: {ADMIN_IDS}")
     logger.info(f"🌐 WebApp: {WEBAPP_URL}")
     
-    await dp.start_polling(telegram_bot, allowed_updates=["message", "callback_query"], skip_updates=True)
+    # =====================================================
+    # FIX: Use proper polling with error handling
+    # =====================================================
+    try:
+        await dp.start_polling(
+            telegram_bot,
+            allowed_updates=["message", "callback_query"],
+            skip_updates=True,
+            polling_timeout=30
+        )
+    except Exception as e:
+        logger.error(f"Polling error: {e}")
+        raise
 
 if __name__ == "__main__":
     try:
