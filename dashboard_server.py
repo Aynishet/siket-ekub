@@ -375,9 +375,9 @@ def api_get_user(telegram_id):
             SELECT
                 user_id,
                 telegram_id,
-                full_name,
-                phone_number,
-                address,
+                COALESCE(full_name, 'User') AS full_name,
+                COALESCE(phone_number, 'N/A') AS phone_number,
+                COALESCE(address, 'N/A') AS address,
                 COALESCE(balance, 0) AS balance,
                 COALESCE(total_spent, 0) AS total_spent,
                 created_at AS registration_date,
@@ -386,10 +386,28 @@ def api_get_user(telegram_id):
             WHERE telegram_id = %s
             LIMIT 1
         """, (telegram_id,))
-        user = fetch_one(cursor)
-
+        
+        user = cursor.fetchone()
+        
         if not user:
-            return jsonify({"success": False, "error": "User not found"}), 404
+            # Return empty user data instead of 404 for unregistered users
+            return jsonify({
+                "success": True,
+                "data": {
+                    "user_id": None,
+                    "telegram_id": telegram_id,
+                    "full_name": "User",
+                    "phone_number": "N/A",
+                    "address": "N/A",
+                    "balance": 0,
+                    "total_spent": 0,
+                    "tickets": [],
+                    "payments": [],
+                    "ticket_count": 0,
+                    "registration_date": None,
+                    "is_registered": False
+                }
+            })
 
         # Get user tickets
         cursor.execute("""
@@ -409,7 +427,7 @@ def api_get_user(telegram_id):
             SELECT
                 payment_id,
                 ticket_number,
-                amount,
+                COALESCE(amount, 3000) AS amount,
                 status,
                 extracted_ref,
                 created_at AS date
@@ -434,15 +452,30 @@ def api_get_user(telegram_id):
                 "payments": payments,
                 "ticket_count": len(tickets),
                 "registration_date": user.get("registration_date"),
+                "is_registered": True
             }
         })
 
     except Exception as exc:
         logger.exception("Error getting user: %s", exc)
-        return jsonify({"success": False, "error": str(exc)}), 500
+        return jsonify({
+            "success": False, 
+            "error": str(exc),
+            "data": {
+                "telegram_id": telegram_id,
+                "full_name": "User",
+                "phone_number": "N/A",
+                "address": "N/A",
+                "balance": 0,
+                "total_spent": 0,
+                "tickets": [],
+                "payments": [],
+                "ticket_count": 0,
+                "is_registered": False
+            }
+        }), 200  # Return 200 even on error so frontend doesn't break
     finally:
         safe_close(conn)
-
 
 # ============================================================
 # CREATE USER
