@@ -146,74 +146,60 @@ async def init_db_postgres():
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status)")
         logger.info("✅ PostgreSQL tables ready")
 
+# =====================================================
+# TICKET GENERATION - FIXED
+# =====================================================
 async def generate_tickets():
     """Generate 20000 tickets if they don't exist"""
     try:
         pool = await get_db_pool()
         async with pool.acquire() as conn:
+            # Check if tickets exist
             count = await conn.fetchval("SELECT COUNT(*) FROM tickets")
+            
             if count and count > 0:
                 logger.info(f"✅ {count} tickets already exist")
+                
+                # Check available tickets
+                available = await conn.fetchval("SELECT COUNT(*) FROM tickets WHERE status = 'available'")
+                logger.info(f"🎫 Available tickets: {available}")
+                
+                # If no available tickets but total exists, reset some
+                if available == 0 and count > 0:
+                    logger.info("🔄 No available tickets! Resetting some tickets...")
+                    await conn.execute("""
+                        UPDATE tickets 
+                        SET status = 'available', user_id = NULL, telegram_id = NULL, phone_number = NULL, assigned_at = NULL 
+                        WHERE status = 'pending' OR status = 'sold'
+                        LIMIT 1000
+                    """)
+                    logger.info("✅ Reset 1000 tickets to available")
                 return
             
             logger.info("🎫 Generating 20000 tickets...")
+            
+            # Generate tickets in batches
             batch_size = 1000
             for start in range(1, 20001, batch_size):
                 end = min(start + batch_size - 1, 20000)
+                
+                # Build batch insert
+                values = []
                 for i in range(start, end + 1):
-                    await conn.execute("INSERT INTO tickets (ticket_number, status) VALUES ($1, 'available')", i)
+                    values.append(f"({i}, 'available')")
+                
+                query = f"INSERT INTO tickets (ticket_number, status) VALUES {','.join(values)}"
+                await conn.execute(query)
                 logger.info(f"✅ Generated tickets {start}-{end}")
-            logger.info("✅ All 20000 tickets generated")
+            
+            # Verify generation
+            final_count = await conn.fetchval("SELECT COUNT(*) FROM tickets")
+            logger.info(f"✅ All {final_count} tickets generated successfully!")
+            
     except Exception as e:
         logger.error(f"❌ Error generating tickets: {e}")
-
-# =====================================================
-# DATABASE HELPER - POSTGRESQL
-# =====================================================
-class DatabaseHelper:
-    @staticmethod
-    async def execute(query: str, *params):
-        pool = await get_db_pool()
-        async with pool.acquire() as conn:
-            if params:
-                return await conn.execute(query, *params)
-            return await conn.execute(query)
-    
-    @staticmethod
-    async def execute_transaction(queries: list):
-        pool = await get_db_pool()
-        async with pool.acquire() as conn:
-            async with conn.transaction():
-                for query, *params in queries:
-                    if params:
-                        await conn.execute(query, *params)
-                    else:
-                        await conn.execute(query)
-                return True
-    
-    @staticmethod
-    async def fetch(query: str, *params):
-        pool = await get_db_pool()
-        async with pool.acquire() as conn:
-            if params:
-                return await conn.fetch(query, *params)
-            return await conn.fetch(query)
-    
-    @staticmethod
-    async def fetch_one(query: str, *params):
-        pool = await get_db_pool()
-        async with pool.acquire() as conn:
-            if params:
-                return await conn.fetchrow(query, *params)
-            return await conn.fetchrow(query)
-    
-    @staticmethod
-    async def executemany(query: str, params_list: list):
-        pool = await get_db_pool()
-        async with pool.acquire() as conn:
-            async with conn.transaction():
-                for params in params_list:
-                    await conn.execute(query, *params)
+        import traceback
+        traceback.print_exc()
 
 # =====================================================
 # LANGUAGE CACHE
