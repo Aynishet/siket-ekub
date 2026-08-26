@@ -482,11 +482,12 @@ def buy_menu(uid: int) -> ReplyKeyboardMarkup:
 def admin_menu(uid: int) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="🛠️ Admin Panel")],
             [KeyboardButton(text=get_text(uid, "verify")), KeyboardButton(text=get_text(uid, "users"))],
             [KeyboardButton(text=get_text(uid, "refund")), KeyboardButton(text=get_text(uid, "broadcast"))],
             [KeyboardButton(text=get_text(uid, "reports")), KeyboardButton(text=get_text(uid, "buy_for_user"))],
             [KeyboardButton(text=get_text(uid, "manual_ticket")), KeyboardButton(text=get_text(uid, "back_user"))],
+            [KeyboardButton(text="➕ Add User"), KeyboardButton(text="✏️ Update User")],
+            [KeyboardButton(text="🗑️ Delete User")],
         ],
         resize_keyboard=True
     )
@@ -530,6 +531,14 @@ BUY_FOR_USER_TEXTS = ["🎯 Buy for User", "🎯 ለተጠቃሚ ቲኬት ግ�
 MANUAL_TICKET_TEXTS = ["📝 Manual Ticket", "📝 በእጅ ቲኬት መመደብ"]
 
 # =====================================================
+# ADD THESE NEW TEXT LISTS - User Management
+# =====================================================
+ADD_USER_TEXTS = ["➕ Add User", "➕ ተጠቃሚ ጨምር"]
+UPDATE_USER_TEXTS = ["✏️ Update User", "✏️ ተጠቃሚ አሻሽል"]
+DELETE_USER_TEXTS = ["🗑️ Delete User", "🗑️ ተጠቃሚ ሰርዝ"]
+# VIEW_USERS_TEXTS = ["👤 Users", "👤 ተጠቃሚዎች"]
+CANCEL_TEXTS = ["❌ Cancel", "❌ ሰርዝ"]
+# =====================================================
 # STATES
 # =====================================================
 class RegState(StatesGroup):
@@ -541,11 +550,21 @@ class BuyState(StatesGroup):
     block = State()
     payment = State()
 
+# Add this new state
 class AdminState(StatesGroup):
     broadcast_msg = State()
     buy_user_id = State()
     buy_ticket_num = State()
     manual_ticket = State()
+    add_user_id = State()
+    add_user_name = State()
+    add_user_phone = State()
+    add_user_address = State()
+    delete_user_id = State()
+    delete_user_confirm = State()  # ← ADD THIS
+    update_user_id = State()
+    update_user_field = State()
+    update_user_value = State()
 
 # =====================================================
 # DATABASE HELPERS
@@ -1322,6 +1341,7 @@ async def view_payment(callback: CallbackQuery):
     await callback.answer()
 
 @router.message(F.text.in_(USERS_TEXTS))
+# @router.message(F.text.in_(VIEW_USERS_TEXTS))
 async def admin_users(message: Message):
     uid = message.from_user.id
     if uid not in ADMIN_IDS:
@@ -1335,14 +1355,394 @@ async def admin_users(message: Message):
     text = "👤 **All Users:**\n\n"
     for u in users[:20]:
         user_id, tg_id, name, phone, address, balance, spent, created = u
-        text += f"🆔 {tg_id}\n👤 {name or 'N/A'}\n📱 {phone or 'N/A'}\n💰 {balance or 0} ETB\n💸 {spent or 0} ETB\n📅 {created[:10]}\n\n"
+        text += (
+            f"🆔 `{tg_id}`\n"
+            f"👤 {name or 'N/A'}\n"
+            f"📱 {phone or 'N/A'}\n"
+            f"📍 {address or 'N/A'}\n"
+            f"💰 {balance or 0:.2f} ETB\n"
+            f"📅 {created[:10] if created else 'N/A'}\n\n"
+        )
     
     if len(users) > 20:
-        text += f"... and {len(users)-20} more"
+        text += f"... and {len(users)-20} more users"
     
     await message.answer(text, reply_markup=admin_menu(uid), parse_mode="Markdown")
+@router.message(F.text.in_(ADD_USER_TEXTS))
+async def admin_add_user(message: Message, state: FSMContext):
+    uid = message.from_user.id
+    if uid not in ADMIN_IDS:
+        return
+    
+    await message.answer(
+        "📝 **Add New User**\n\n"
+        "Enter the user's Telegram ID:\n"
+        "(e.g., 123456789)\n\n"
+        "Type ❌ Cancel to cancel.",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="❌ Cancel")]],
+            resize_keyboard=True
+        ),
+        parse_mode="Markdown"
+    )
+    await state.set_state(AdminState.add_user_id)
 
+@router.message(AdminState.add_user_id, F.text)
+async def admin_add_user_id(message: Message, state: FSMContext):
+    uid = message.from_user.id
+    if uid not in ADMIN_IDS:
+        return
+    
+    if message.text == "❌ Cancel":
+        await state.clear()
+        await message.answer("❌ Cancelled.", reply_markup=admin_menu(uid))
+        return
+    
+    try:
+        telegram_id = int(message.text.strip())
+    except:
+        await message.answer("❌ Invalid ID. Enter a number.")
+        return
+    
+    # Check if user exists
+    existing = await get_user(telegram_id)
+    if existing:
+        await message.answer(
+            f"❌ User {telegram_id} already exists!\n"
+            f"👤 {existing[2] or 'N/A'}\n"
+            f"📱 {existing[3] or 'N/A'}",
+            reply_markup=admin_menu(uid)
+        )
+        await state.clear()
+        return
+    
+    await state.update_data(telegram_id=telegram_id)
+    await message.answer("📝 Enter full name:")
+    await state.set_state(AdminState.add_user_name)
+
+@router.message(AdminState.add_user_name, F.text)
+async def admin_add_user_name(message: Message, state: FSMContext):
+    uid = message.from_user.id
+    if uid not in ADMIN_IDS:
+        return
+    
+    if message.text == "❌ Cancel":
+        await state.clear()
+        await message.answer("❌ Cancelled.", reply_markup=admin_menu(uid))
+        return
+    
+    await state.update_data(name=message.text)
+    await message.answer("📱 Enter phone number:")
+    await state.set_state(AdminState.add_user_phone)
+
+@router.message(AdminState.add_user_phone, F.text)
+async def admin_add_user_phone(message: Message, state: FSMContext):
+    uid = message.from_user.id
+    if uid not in ADMIN_IDS:
+        return
+    
+    if message.text == "❌ Cancel":
+        await state.clear()
+        await message.answer("❌ Cancelled.", reply_markup=admin_menu(uid))
+        return
+    
+    await state.update_data(phone=message.text)
+    await message.answer("📍 Enter address:")
+    await state.set_state(AdminState.add_user_address)
+
+@router.message(AdminState.add_user_address, F.text)
+async def admin_add_user_address(message: Message, state: FSMContext):
+    uid = message.from_user.id
+    if uid not in ADMIN_IDS:
+        return
+    
+    if message.text == "❌ Cancel":
+        await state.clear()
+        await message.answer("❌ Cancelled.", reply_markup=admin_menu(uid))
+        return
+    
+    data = await state.get_data()
+    telegram_id = data.get("telegram_id")
+    name = data.get("name")
+    phone = data.get("phone")
+    address = message.text
+    
+    try:
+        await DatabaseHelper.execute(
+            "INSERT INTO users (telegram_id, full_name, phone_number, address, language) VALUES ($1, $2, $3, $4, 'en')",
+            telegram_id, name, phone, address
+        )
+        
+        await message.answer(
+            f"✅ **User Added!**\n\n"
+            f"🆔 {telegram_id}\n"
+            f"👤 {name}\n"
+            f"📱 {phone}\n"
+            f"📍 {address}",
+            reply_markup=admin_menu(uid),
+            parse_mode="Markdown"
+        )
+        
+        try:
+            await telegram_bot.send_message(
+                telegram_id,
+                f"✅ You have been registered by an admin!\n"
+                f"👤 {name}\n📱 {phone}\n📍 {address}\n\nUse /start to begin!"
+            )
+        except:
+            pass
+            
+    except Exception as e:
+        await message.answer(f"❌ Error: {e}", reply_markup=admin_menu(uid))
+    
+    await state.clear()
 @router.message(F.text.in_(REFUND_TEXTS))
+@router.message(F.text.in_(UPDATE_USER_TEXTS))
+async def admin_update_user(message: Message, state: FSMContext):
+    uid = message.from_user.id
+    if uid not in ADMIN_IDS:
+        return
+    
+    await message.answer(
+        "✏️ **Update User**\n\n"
+        "Enter the user's Telegram ID:\n"
+        "(e.g., 123456789)\n\n"
+        "Type ❌ Cancel to cancel.",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="❌ Cancel")]],
+            resize_keyboard=True
+        ),
+        parse_mode="Markdown"
+    )
+    await state.set_state(AdminState.update_user_id)
+
+# =====================================================
+# DELETE USER HANDLERS - ADD THIS
+# =====================================================
+
+@router.message(F.text.in_(DELETE_USER_TEXTS))
+async def admin_delete_user(message: Message, state: FSMContext):
+    uid = message.from_user.id
+    if uid not in ADMIN_IDS:
+        return
+    
+    await message.answer(
+        "🗑️ **Delete User**\n\n"
+        "Enter the user's Telegram ID:\n"
+        "(e.g., 123456789)\n\n"
+        "⚠️ This cannot be undone!\n\n"
+        "Type ❌ Cancel to cancel.",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="❌ Cancel")]],
+            resize_keyboard=True
+        ),
+        parse_mode="Markdown"
+    )
+    await state.set_state(AdminState.delete_user_id)
+
+@router.message(AdminState.delete_user_id, F.text)
+async def admin_delete_user_id(message: Message, state: FSMContext):
+    uid = message.from_user.id
+    if uid not in ADMIN_IDS:
+        return
+    
+    if message.text == "❌ Cancel":
+        await state.clear()
+        await message.answer("❌ Cancelled.", reply_markup=admin_menu(uid))
+        return
+    
+    try:
+        telegram_id = int(message.text.strip())
+    except:
+        await message.answer("❌ Invalid ID.")
+        return
+    
+    user = await get_user(telegram_id)
+    if not user:
+        await message.answer(f"❌ User {telegram_id} not found!", reply_markup=admin_menu(uid))
+        await state.clear()
+        return
+    
+    await state.update_data(telegram_id=telegram_id)
+    
+    kb = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="✅ Yes, Delete"), KeyboardButton(text="❌ Cancel")],
+        ],
+        resize_keyboard=True
+    )
+    
+    await message.answer(
+        f"⚠️ **Confirm Deletion**\n\n"
+        f"Delete this user?\n\n"
+        f"🆔 {telegram_id}\n"
+        f"👤 {user[2] or 'N/A'}\n"
+        f"📱 {user[3] or 'N/A'}\n"
+        f"📍 {user[4] or 'N/A'}",
+        reply_markup=kb,
+        parse_mode="Markdown"
+    )
+    await state.set_state(AdminState.delete_user_confirm)
+
+@router.message(AdminState.delete_user_confirm, F.text.in_(["✅ Yes, Delete", "❌ Cancel"]))
+async def admin_delete_user_confirm(message: Message, state: FSMContext):
+    uid = message.from_user.id
+    if uid not in ADMIN_IDS:
+        return
+    
+    if message.text == "❌ Cancel":
+        await state.clear()
+        await message.answer("❌ Cancelled.", reply_markup=admin_menu(uid))
+        return
+    
+    data = await state.get_data()
+    telegram_id = data.get("telegram_id")
+    
+    user = await get_user(telegram_id)
+    name = user[2] if user else "User"
+    
+    try:
+        # Delete user's tickets
+        await DatabaseHelper.execute(
+            "UPDATE tickets SET user_id = NULL, telegram_id = NULL, phone_number = NULL, full_name = NULL WHERE telegram_id = $1",
+            telegram_id
+        )
+        await DatabaseHelper.execute("DELETE FROM payments WHERE telegram_id = $1", telegram_id)
+        await DatabaseHelper.execute("DELETE FROM refunds WHERE telegram_id = $1", telegram_id)
+        await DatabaseHelper.execute("DELETE FROM users WHERE telegram_id = $1", telegram_id)
+        
+        await message.answer(
+            f"✅ **User Deleted!**\n\n"
+            f"🆔 {telegram_id}\n"
+            f"👤 {name}",
+            reply_markup=admin_menu(uid),
+            parse_mode="Markdown"
+        )
+        
+        try:
+            await telegram_bot.send_message(
+                telegram_id,
+                "❌ Your account has been deleted by an admin."
+            )
+        except:
+            pass
+            
+    except Exception as e:
+        await message.answer(f"❌ Error: {e}", reply_markup=admin_menu(uid))
+    
+    await state.clear()
+@router.message(AdminState.update_user_id, F.text)
+async def admin_update_user_id(message: Message, state: FSMContext):
+    uid = message.from_user.id
+    if uid not in ADMIN_IDS:
+        return
+    
+    if message.text == "❌ Cancel":
+        await state.clear()
+        await message.answer("❌ Cancelled.", reply_markup=admin_menu(uid))
+        return
+    
+    try:
+        telegram_id = int(message.text.strip())
+    except:
+        await message.answer("❌ Invalid ID.")
+        return
+    
+    user = await get_user(telegram_id)
+    if not user:
+        await message.answer(f"❌ User {telegram_id} not found!", reply_markup=admin_menu(uid))
+        await state.clear()
+        return
+    
+    await state.update_data(telegram_id=telegram_id)
+    
+    kb = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="✏️ Name"), KeyboardButton(text="✏️ Phone")],
+            [KeyboardButton(text="✏️ Address"), KeyboardButton(text="❌ Cancel")],
+        ],
+        resize_keyboard=True
+    )
+    
+    await message.answer(
+        f"👤 **Current Info:**\n\n"
+        f"🆔 {telegram_id}\n"
+        f"👤 {user[2] or 'N/A'}\n"
+        f"📱 {user[3] or 'N/A'}\n"
+        f"📍 {user[4] or 'N/A'}\n\n"
+        f"**What to update?**",
+        reply_markup=kb,
+        parse_mode="Markdown"
+    )
+    await state.set_state(AdminState.update_user_field)
+
+@router.message(AdminState.update_user_field, F.text)
+async def admin_update_user_field(message: Message, state: FSMContext):
+    uid = message.from_user.id
+    if uid not in ADMIN_IDS:
+        return
+    
+    if message.text == "❌ Cancel":
+        await state.clear()
+        await message.answer("❌ Cancelled.", reply_markup=admin_menu(uid))
+        return
+    
+    field_map = {
+        "✏️ Name": "full_name",
+        "✏️ Phone": "phone_number",
+        "✏️ Address": "address"
+    }
+    
+    if message.text not in field_map:
+        await message.answer("❌ Select a valid option.")
+        return
+    
+    await state.update_data(field=field_map[message.text])
+    field_name = message.text.replace("✏️ ", "")
+    await message.answer(f"📝 Enter new {field_name}:")
+    await state.set_state(AdminState.update_user_value)
+
+@router.message(AdminState.update_user_value, F.text)
+async def admin_update_user_value(message: Message, state: FSMContext):
+    uid = message.from_user.id
+    if uid not in ADMIN_IDS:
+        return
+    
+    if message.text == "❌ Cancel":
+        await state.clear()
+        await message.answer("❌ Cancelled.", reply_markup=admin_menu(uid))
+        return
+    
+    data = await state.get_data()
+    telegram_id = data.get("telegram_id")
+    field = data.get("field")
+    new_value = message.text
+    
+    try:
+        query = f"UPDATE users SET {field} = $1 WHERE telegram_id = $2"
+        await DatabaseHelper.execute(query, new_value, telegram_id)
+        
+        await message.answer(
+            f"✅ **User Updated!**\n\n"
+            f"🆔 {telegram_id}\n"
+            f"📝 {field.replace('_', ' ').title()} → {new_value}",
+            reply_markup=admin_menu(uid),
+            parse_mode="Markdown"
+        )
+        
+        try:
+            await telegram_bot.send_message(
+                telegram_id,
+                f"✅ Your {field.replace('_', ' ')} has been updated to: **{new_value}**",
+                parse_mode="Markdown"
+            )
+        except:
+            pass
+            
+    except Exception as e:
+        await message.answer(f"❌ Error: {e}", reply_markup=admin_menu(uid))
+    
+    await state.clear()
 async def admin_refund(message: Message):
     uid = message.from_user.id
     if uid not in ADMIN_IDS:
