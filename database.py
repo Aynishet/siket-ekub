@@ -297,10 +297,11 @@ async def init_postgres():
         if not result:
             print("🎮 Creating default lottery game...")
             
+            # FIXED: Correct parameter passing
             await conn.execute('''
                 INSERT INTO ticket_types (name, description, total_slots, price, is_active)
                 VALUES ($1, $2, $3, $4, $5)
-            ''', ("Siket Ekub Main Draw", "Main lottery draw with 10 exciting prizes", 20000, 3000.00, True))
+            ''', "Siket Ekub Main Draw", "Main lottery draw with 10 exciting prizes", 20000, 3000.00, True)
             
             type_id = await conn.fetchval("SELECT LASTVAL()")
             
@@ -312,7 +313,7 @@ async def init_postgres():
                     await conn.execute('''
                         INSERT INTO tickets (type_id, ticket_code, ticket_number, status)
                         VALUES ($1, $2, $3, $4)
-                    ''', (type_id, f"{type_id}_{j}", j, 'available'))
+                    ''', type_id, f"{type_id}_{j}", j, 'available')
                 print(f"   Generated {end} tickets...")
             
             prizes = [
@@ -332,9 +333,40 @@ async def init_postgres():
                 await conn.execute('''
                     INSERT INTO prizes (type_id, prize_position, prize_name, prize_description, prize_value)
                     VALUES ($1, $2, $3, $4, $5)
-                ''', prize)
+                ''', *prize)
             
             print("✅ Default data created successfully with 20,000 tickets!")
+        
+        # FIX: Add missing columns to existing tables
+        try:
+            await conn.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS full_name TEXT")
+            print("✅ Added full_name to tickets")
+        except:
+            pass
+        
+        try:
+            await conn.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS phone_number TEXT")
+            print("✅ Added phone_number to tickets")
+        except:
+            pass
+        
+        try:
+            await conn.execute("ALTER TABLE payments ADD COLUMN IF NOT EXISTS full_name TEXT")
+            print("✅ Added full_name to payments")
+        except:
+            pass
+        
+        try:
+            await conn.execute("ALTER TABLE payments ADD COLUMN IF NOT EXISTS phone_number TEXT")
+            print("✅ Added phone_number to payments")
+        except:
+            pass
+        
+        try:
+            await conn.execute("ALTER TABLE payments ADD COLUMN IF NOT EXISTS amount DECIMAL(15,2) DEFAULT 3000")
+            print("✅ Added amount to payments")
+        except:
+            pass
         
         print("✅ PostgreSQL Database ready!")
         
