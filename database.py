@@ -1,7 +1,7 @@
 # database.py - Complete PostgreSQL Version with All Features
 import os
 import logging
-import asyncio
+import asyncio  # ← ADD THIS
 from datetime import datetime
 
 # =====================================================
@@ -181,7 +181,7 @@ async def init_postgres():
             )
         ''')
         
-        # Payments table - FIXED with all columns including full_name, phone_number, amount
+        # Payments table - FIXED with all columns
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS payments (
                 payment_id SERIAL PRIMARY KEY,
@@ -340,7 +340,7 @@ async def init_postgres():
         # FIX: Add missing columns to existing tables
         # =====================================================
         
-        # Fix tickets table - add full_name if missing
+        # Fix tickets table
         try:
             await conn.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS full_name TEXT")
             print("✅ Added full_name to tickets")
@@ -353,7 +353,7 @@ async def init_postgres():
         except Exception as e:
             print(f"phone_number tickets: {e}")
         
-        # Fix payments table - add all missing columns
+        # Fix payments table
         try:
             await conn.execute("ALTER TABLE payments ADD COLUMN IF NOT EXISTS full_name TEXT")
             print("✅ Added full_name to payments")
@@ -371,17 +371,6 @@ async def init_postgres():
             print("✅ Added amount to payments")
         except Exception as e:
             print(f"amount payments: {e}")
-        
-        # Verify columns exist
-        columns = await conn.fetch("""
-            SELECT column_name FROM information_schema.columns 
-            WHERE table_name = 'payments' 
-            ORDER BY ordinal_position
-        """)
-        
-        print("\n📊 Payments table columns:")
-        for col in columns:
-            print(f"  - {col['column_name']}")
         
         print("✅ PostgreSQL Database ready!")
         
@@ -436,7 +425,7 @@ async def init_sqlite():
             )
         """)
         
-        # Tickets table - FIXED
+        # Tickets table
         await db.execute("""
             CREATE TABLE IF NOT EXISTS tickets (
                 ticket_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -455,7 +444,7 @@ async def init_sqlite():
             )
         """)
         
-        # Payments table - FIXED with all columns
+        # Payments table
         await db.execute("""
             CREATE TABLE IF NOT EXISTS payments (
                 payment_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -716,7 +705,7 @@ async def get_user_tickets(telegram_id: int):
     """, (telegram_id,))
 
 async def get_pending_payments():
-    """Get all pending payments with full_name and phone_number"""
+    """Get all pending payments"""
     return await DatabaseHelper.fetch("""
         SELECT p.payment_id, p.telegram_id, p.phone_number, p.full_name, p.ticket_number,
                p.extracted_ref, p.amount, p.created_at, u.full_name as user_name,
