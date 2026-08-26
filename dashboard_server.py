@@ -366,7 +366,22 @@ def api_get_user(telegram_id):
     try:
         conn = get_db_connection()
         if not conn:
-            return jsonify({"success": False, "error": "Database connection failed"}), 500
+            return jsonify({
+                "success": False, 
+                "error": "Database connection failed",
+                "data": {
+                    "telegram_id": telegram_id,
+                    "full_name": "User",
+                    "phone_number": "N/A",
+                    "address": "N/A",
+                    "balance": 0,
+                    "total_spent": 0,
+                    "tickets": [],
+                    "payments": [],
+                    "ticket_count": 0,
+                    "is_registered": False
+                }
+            }), 200  # Return 200 even on error
 
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
@@ -389,12 +404,11 @@ def api_get_user(telegram_id):
         
         user = cursor.fetchone()
         
+        # If user not found, return empty data with is_registered=False
         if not user:
-            # Return empty user data instead of 404 for unregistered users
             return jsonify({
                 "success": True,
                 "data": {
-                    "user_id": None,
                     "telegram_id": telegram_id,
                     "full_name": "User",
                     "phone_number": "N/A",
@@ -404,10 +418,10 @@ def api_get_user(telegram_id):
                     "tickets": [],
                     "payments": [],
                     "ticket_count": 0,
-                    "registration_date": None,
-                    "is_registered": False
+                    "is_registered": False,
+                    "registration_date": None
                 }
-            })
+            }), 200
 
         # Get user tickets
         cursor.execute("""
@@ -454,7 +468,7 @@ def api_get_user(telegram_id):
                 "registration_date": user.get("registration_date"),
                 "is_registered": True
             }
-        })
+        }), 200
 
     except Exception as exc:
         logger.exception("Error getting user: %s", exc)
@@ -473,10 +487,9 @@ def api_get_user(telegram_id):
                 "ticket_count": 0,
                 "is_registered": False
             }
-        }), 200  # Return 200 even on error so frontend doesn't break
+        }), 200  # Return 200 so frontend doesn't break
     finally:
         safe_close(conn)
-
 # ============================================================
 # CREATE USER
 # ============================================================
