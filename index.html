@@ -786,7 +786,6 @@
 
     const userInfo = tg?.initDataUnsafe?.user || { id: "99887766", first_name: "Valued User" };
 
-    // API Base
     const API_BASE = window.location.origin + '/api';
     let currentUser = { 
         id: userInfo.id, 
@@ -815,6 +814,9 @@
         { rank: '💰', name: '200,000 ETB Cash', value: '200,000 ETB', price: 3000, category: 'cash', image: './assets/car/10th.png', badge: '10th Prize', group: 'cash', fullWidth: true }
     ];
 
+    // ============================================================
+    // WINDOW ONLOAD
+    // ============================================================
     window.onload = function() { 
         console.log('=== WINDOW ONLOAD ===');
         console.log('User ID:', currentUser.id);
@@ -841,6 +843,9 @@
         }, 5000);
     };
 
+    // ============================================================
+    // TOAST, API CALL, OPEN PAGE
+    // ============================================================
     function showToast(message, type = 'info') { 
         const toast = document.getElementById('toast'); 
         toast.textContent = message; 
@@ -1055,74 +1060,100 @@
     // ============================================================
     // LOAD ACCOUNT - FIXED
     // ============================================================
-    async function loadAccount() {
-        try {
-            const result = await apiCall(`/user/${currentUser.id}`);
-            console.log('Account load response:', result);
+async function loadAccount() {
+    try {
+        const result = await apiCall(`/user/${currentUser.id}`);
+        console.log('Account load response:', result);
+        
+        if (result && result.success && result.data) {
+            const data = result.data;
             
-            if (result && result.success && result.data) {
-                const data = result.data;
-                
-                // Parse data correctly
-                currentUser.balance = typeof data.balance === 'number' ? data.balance : 0;
-                currentUser.totalSpent = typeof data.total_spent === 'number' ? data.total_spent : 0;
-                currentUser.tickets = Array.isArray(data.tickets) ? data.tickets : [];
-                currentUser.transactions = Array.isArray(data.payments) ? data.payments : [];
-                currentUser.phone = data.phone_number || 'Not set';
-                currentUser.full_name = data.full_name || 'User';
-                currentUser.address = data.address || 'N/A';
-                currentUser.isRegistered = data.is_registered || false;
-                
-                // Update Account Page
-                document.getElementById('accName').textContent = currentUser.full_name;
-                document.getElementById('accId').textContent = currentUser.id;
-                document.getElementById('accPhone').textContent = currentUser.phone;
-                document.getElementById('accBalance').textContent = currentUser.balance.toLocaleString() + ' ETB';
-                document.getElementById('accTickets').textContent = currentUser.tickets.length;
-                document.getElementById('accSpent').textContent = currentUser.totalSpent.toLocaleString() + ' ETB';
-                
-                // Update wallet badge
-                const walletEl = document.getElementById('userWallet');
-                if (walletEl) {
-                    walletEl.innerHTML = '<i class="fas fa-wallet" style="margin-right:4px;"></i> ' + currentUser.balance.toLocaleString() + ' ETB';
-                }
-                document.getElementById('walletAmount').textContent = currentUser.balance.toLocaleString();
-                document.getElementById('refundBalance').textContent = currentUser.balance.toLocaleString() + ' ETB';
-                
-                // Display ticket numbers
+            // Parse data correctly - use the exact field names from API
+            currentUser.balance = typeof data.balance === 'number' ? data.balance : 0;
+            currentUser.totalSpent = typeof data.total_spent === 'number' ? data.total_spent : 0;
+            currentUser.tickets = Array.isArray(data.tickets) ? data.tickets : [];
+            currentUser.transactions = Array.isArray(data.payments) ? data.payments : [];
+            currentUser.phone = data.phone_number || 'Not set';
+            currentUser.full_name = data.full_name || 'User';
+            currentUser.address = data.address || 'N/A';
+            currentUser.isRegistered = data.is_registered || false;
+            
+            // Update Account Page
+            const accName = document.getElementById('accName');
+            if (accName) accName.textContent = currentUser.full_name;
+            
+            const accId = document.getElementById('accId');
+            if (accId) accId.textContent = currentUser.id;
+            
+            const accPhone = document.getElementById('accPhone');
+            if (accPhone) accPhone.textContent = currentUser.phone;
+            
+            const accBalance = document.getElementById('accBalance');
+            if (accBalance) accBalance.textContent = currentUser.balance.toLocaleString() + ' ETB';
+            
+            const accTickets = document.getElementById('accTickets');
+            if (accTickets) accTickets.textContent = currentUser.tickets.length;
+            
+            const accSpent = document.getElementById('accSpent');
+            if (accSpent) accSpent.textContent = currentUser.totalSpent.toLocaleString() + ' ETB';
+            
+            // Update wallet badge
+            const userWallet = document.getElementById('userWallet');
+            if (userWallet) {
+                userWallet.innerHTML = '<i class="fas fa-wallet" style="margin-right:4px;"></i> ' + currentUser.balance.toLocaleString() + ' ETB';
+            }
+            
+            const walletAmount = document.getElementById('walletAmount');
+            if (walletAmount) walletAmount.textContent = currentUser.balance.toLocaleString();
+            
+            const refundBalance = document.getElementById('refundBalance');
+            if (refundBalance) refundBalance.textContent = currentUser.balance.toLocaleString() + ' ETB';
+            
+            // Display ticket numbers
+            const accTicketNumbers = document.getElementById('accTicketNumbers');
+            if (accTicketNumbers) {
                 if (currentUser.tickets && currentUser.tickets.length > 0) {
                     const ticketNumbers = currentUser.tickets.map(t => `#${t.ticket_number}`).join(', ');
-                    document.getElementById('accTicketNumbers').textContent = ticketNumbers;
+                    accTicketNumbers.textContent = ticketNumbers;
                 } else {
-                    document.getElementById('accTicketNumbers').textContent = 'None';
+                    accTicketNumbers.textContent = 'None';
                 }
-                
-                renderMyTicketsSummary();
-            } else {
-                console.warn('No user data returned');
-                setDefaultAccountData();
             }
-        } catch (error) {
-            console.error('Account load error:', error);
+            
+            renderMyTicketsSummary();
+        } else {
+            console.warn('No user data returned');
             setDefaultAccountData();
         }
+    } catch (error) {
+        console.error('Account load error:', error);
+        setDefaultAccountData();
     }
+}
 
-    function setDefaultAccountData() {
-        document.getElementById('accName').textContent = currentUser.name || 'User';
-        document.getElementById('accId').textContent = currentUser.id || 'N/A';
-        document.getElementById('accPhone').textContent = 'Not set';
-        document.getElementById('accBalance').textContent = '0 ETB';
-        document.getElementById('accTickets').textContent = '0';
-        document.getElementById('accSpent').textContent = '0 ETB';
-        document.getElementById('walletAmount').textContent = '0';
-        document.getElementById('refundBalance').textContent = '0 ETB';
-        document.getElementById('accTicketNumbers').textContent = 'None';
-        const walletEl = document.getElementById('userWallet');
-        if (walletEl) {
-            walletEl.innerHTML = '<i class="fas fa-wallet" style="margin-right:4px;"></i> 0 ETB';
-        }
+function setDefaultAccountData() {
+    const defaults = {
+        'accName': currentUser.name || 'User',
+        'accId': currentUser.id || 'N/A',
+        'accPhone': 'Not set',
+        'accBalance': '0 ETB',
+        'accTickets': '0',
+        'accSpent': '0 ETB',
+        'walletAmount': '0',
+        'refundBalance': '0 ETB',
+        'accTicketNumbers': 'None'
+    };
+    
+    for (const [id, value] of Object.entries(defaults)) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
     }
+    
+    const userWallet = document.getElementById('userWallet');
+    if (userWallet) {
+        userWallet.innerHTML = '<i class="fas fa-wallet" style="margin-right:4px;"></i> 0 ETB';
+    }
+}
 
     // ============================================================
     // RENDER MY TICKETS SUMMARY
