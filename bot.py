@@ -851,42 +851,44 @@ async def my_tickets_cmd(message: Message):
         await message.answer(get_text(uid, "registration_required"))
         return
     
-    # Check if user has tickets
     tickets = await DatabaseHelper.fetch(
         "SELECT ticket_number, assigned_at, status FROM tickets WHERE telegram_id = $1 ORDER BY ticket_number",
         uid
     )
     
-    # Debug: Check what tickets exist
-    print(f"🔍 Tickets found for user {uid}: {len(tickets)}")
-    
     if not tickets:
-        await message.answer(
-            f"📭 You have no tickets yet.\n\nUse 🎯 Buy Ticket to purchase your first ticket!",
-            reply_markup=user_menu(uid)
-        )
+        await message.answer(get_text(uid, "no_tickets_owned"), reply_markup=user_menu(uid))
         return
     
     total = len(tickets)
     sold = sum(1 for t in tickets if t[2] == 'sold')
     pending = sum(1 for t in tickets if t[2] == 'pending')
     
-    text = f"🎫 **Your Tickets ({total})**\n\n"
-    text += f"✅ Sold: {sold} | ⏳ Pending: {pending}\n\n"
+    text = get_text(uid, "your_tickets", count=total)
+    text += f"📊 Sold: {sold}, Pending: {pending}\n\n"
     
-    # Show tickets
     for ticket in tickets[:20]:
         num = ticket[0]
-        date = ticket[1]
+        date = ticket[1]  # This is a datetime object
         status = ticket[2]
+        
         status_icon = "✅" if status == "sold" else "⏳"
-        date_str = date[:10] if date else 'N/A'
+        
+        # FIX: Convert datetime to string properly
+        if date:
+            if hasattr(date, 'strftime'):
+                date_str = date.strftime('%Y-%m-%d')
+            else:
+                date_str = str(date)[:10]
+        else:
+            date_str = 'N/A'
+        
         text += f"{status_icon} #{num} - {date_str}\n"
     
     if len(tickets) > 20:
         text += f"\n... and {len(tickets)-20} more"
     
-    await message.answer(text, reply_markup=user_menu(uid), parse_mode="Markdown")
+    await message.answer(text, reply_markup=user_menu(uid))
 @router.message(F.text.in_(BALANCE_TEXTS))
 async def balance_cmd(message: Message):
     uid = message.from_user.id
