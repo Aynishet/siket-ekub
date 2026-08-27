@@ -487,11 +487,11 @@ def admin_menu(uid: int) -> ReplyKeyboardMarkup:
             [KeyboardButton(text=get_text(uid, "reports")), KeyboardButton(text=get_text(uid, "buy_for_user"))],
             [KeyboardButton(text=get_text(uid, "manual_ticket")), KeyboardButton(text=get_text(uid, "back_user"))],
             [KeyboardButton(text="➕ Add User"), KeyboardButton(text="✏️ Update User")],
-            [KeyboardButton(text="🗑️ Delete User")],
+            [KeyboardButton(text="🗑️ Delete User"), KeyboardButton(text="📋 Reports")],
+            [KeyboardButton(text="🔄 Remove Ticket")],  # ← ADD THIS
         ],
         resize_keyboard=True
     )
-
 # =====================================================
 # TEXT LISTS FOR BOTH LANGUAGES
 # =====================================================
@@ -538,6 +538,11 @@ UPDATE_USER_TEXTS = ["✏️ Update User", "✏️ ተጠቃሚ አሻሽል"]
 DELETE_USER_TEXTS = ["🗑️ Delete User", "🗑️ ተጠቃሚ ሰርዝ"]
 # VIEW_USERS_TEXTS = ["👤 Users", "👤 ተጠቃሚዎች"]
 CANCEL_TEXTS = ["❌ Cancel", "❌ ሰርዝ"]
+# Add these to your text lists
+REMOVE_TICKET_TEXTS = ["🔄 Remove Ticket", "🔄 ቲኬት አስወግድ"]
+REPORTS_TEXTS = ["📋 Reports", "📋 ሪፖርቶች"]
+# Add to your text lists
+# REPORTS_TEXTS = ["📋 Reports", "📋 ሪፖርቶች"]
 # =====================================================
 # STATES
 # =====================================================
@@ -550,7 +555,6 @@ class BuyState(StatesGroup):
     block = State()
     payment = State()
 
-# Add this new state
 class AdminState(StatesGroup):
     broadcast_msg = State()
     buy_user_id = State()
@@ -561,10 +565,12 @@ class AdminState(StatesGroup):
     add_user_phone = State()
     add_user_address = State()
     delete_user_id = State()
-    delete_user_confirm = State()  # ← ADD THIS
+    delete_user_confirm = State()
     update_user_id = State()
     update_user_field = State()
     update_user_value = State()
+    remove_ticket_user_id = State()  # ← ADD THIS
+    remove_ticket_number = State()   # ← ADD THIS
 
 # =====================================================
 # DATABASE HELPERS
@@ -1515,7 +1521,197 @@ async def admin_update_user(message: Message, state: FSMContext):
         parse_mode="Markdown"
     )
     await state.set_state(AdminState.update_user_id)
+@router.message(F.text.in_(REMOVE_TICKET_TEXTS))
+async def admin_remove_ticket(message: Message, state: FSMContext):
+    uid = message.from_user.id
+    if uid not in ADMIN_IDS:
+        return
+    
+    await message.answer(
+        "🔄 **Remove Ticket from User**\n\n"
+        "Enter the user's Telegram ID:\n"
+        "(e.g., 123456789)\n\n"
+        "Type ❌ Cancel to cancel.",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="❌ Cancel")]],
+            resize_keyboard=True
+        ),
+        parse_mode="Markdown"
+    )
+    await state.set_state(AdminState.remove_ticket_user_id)
 
+@router.message(AdminState.remove_ticket_user_id, F.text)
+async def admin_remove_ticket_user_id(message: Message, state: FSMContext):
+    uid = message.from_user.id
+    if uid not in ADMIN_IDS:
+        return
+    
+    if message.text == "❌ Cancel":
+        await state.clear()
+        await message.answer("❌ Cancelled.", reply_markup=admin_menu(uid))
+        return
+    
+    try:
+        telegram_id = int(message.text.strip())
+    except:
+        await message.answer("❌ Invalid ID. Please enter a number.")
+        return
+    
+    # Check if user exists
+    user = await get_user(telegram_id)
+    if not user:
+        await message.answer(f"❌ User {telegram_id} not found!", reply_markup=admin_menu(uid))
+        await state.clear()
+        return
+    
+    # Get user's tickets
+    tickets = await DatabaseHelper.fetch(
+        "SELECT ticket_id, ticket_number, status FROM tickets WHERE telegram_id = $1 AND status IN ('sold', 'pending') ORDER BY ticket_number",
+        telegram_id
+    )
+    
+    if not tickets:
+        await message.answer(
+            f"📭 User {telegram_id} has no tickets to remove.\n"
+            f"👤 {user[2] or 'User'}",
+            reply_markup=admin_menu(uid)
+        )
+        await state.clear()
+        return
+    
+    await state.update_data(telegram_id=telegram_id)
+    
+    # Show tickets as buttons
+    kb = InlineKeyboardMarkup(inline_keyboard=[])
+    for ticket in tickets[:20]:
+        ticket_id = ticket[0]
+        ticket_num = ticket[1]
+        status = ticket[2]
+        status_icon = "✅" if status == "sold" else "⏳"
+        kb.inline_keyboard.append([
+            InlineKeyboardButton(
+                text=f"{status_icon} Ticket #{ticket_num}",
+                callback_data=f"remove_ticket_{ticket_id}"
+            )
+        ])
+    
+    kb.inline_keyboard.append([
+        InlineKeyboardButton(text="❌ Cancel", callback_data="remove_cancel")
+    ])
+    
+    await message.answer(
+        f"🔄 **Select ticket to remove from user**\n\n"
+        f"👤 User: {user[2] or 'User'}\n"
+        f"🆔 {telegram_id}\n"
+        f"🎫 Total tickets: {len(tickets)}\n\n"
+        f"Select a ticket to remove:",
+        reply_markup=kb,
+        parse_mode="Markdown"
+    )
+    await state.set_state(AdminState.remove_ticket_number)
+
+@router.callback_query(F.data.startswith("remove_ticket_"))
+async def admin_remove_ticket_confirm(callback: CallbackQuery, state: FSMContext):
+    uid = callback.from_user.id
+    if uid not in ADMIN_IDS:
+        await callback.answer("⛔ Unauthorized!", show_alert=True)
+        return
+    
+    ticket_id = int(callback.data.split("_")[2])
+    
+    # Get ticket info
+    ticket = await DatabaseHelper.fetch_one(
+        "SELECT ticket_id, ticket_number, telegram_id, full_name, status FROM tickets WHERE ticket_id = $1",
+        ticket_id
+    )
+    
+    if not ticket:
+        await callback.answer("❌ Ticket not found!", show_alert=True)
+        return
+    
+    ticket_id, ticket_num, tg_id, name, status = ticket
+    
+    # Confirm removal
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Yes, Remove", callback_data=f"confirm_remove_{ticket_id}")],
+        [InlineKeyboardButton(text="❌ Cancel", callback_data="remove_cancel")]
+    ])
+    
+    await callback.message.edit_text(
+        f"⚠️ **Confirm Ticket Removal**\n\n"
+        f"🎫 Ticket #{ticket_num}\n"
+        f"👤 User: {name or 'Unknown'}\n"
+        f"🆔 {tg_id}\n"
+        f"📊 Status: {status}\n\n"
+        f"Are you sure you want to remove this ticket?\n"
+        f"The ticket will become available again.",
+        reply_markup=kb,
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("confirm_remove_"))
+async def admin_remove_ticket_execute(callback: CallbackQuery):
+    uid = callback.from_user.id
+    if uid not in ADMIN_IDS:
+        await callback.answer("⛔ Unauthorized!", show_alert=True)
+        return
+    
+    ticket_id = int(callback.data.split("_")[2])
+    
+    # Get ticket info for notification
+    ticket = await DatabaseHelper.fetch_one(
+        "SELECT ticket_id, ticket_number, telegram_id, full_name FROM tickets WHERE ticket_id = $1",
+        ticket_id
+    )
+    
+    if not ticket:
+        await callback.answer("❌ Ticket not found!", show_alert=True)
+        return
+    
+    ticket_id, ticket_num, tg_id, name = ticket
+    
+    # Remove ticket from user (make available)
+    await DatabaseHelper.execute(
+        "UPDATE tickets SET status = 'available', user_id = NULL, telegram_id = NULL, phone_number = NULL, full_name = NULL, assigned_at = NULL WHERE ticket_id = $1",
+        ticket_id
+    )
+    
+    # Notify user
+    try:
+        await telegram_bot.send_message(
+            tg_id,
+            f"🔄 Admin has removed ticket #{ticket_num} from your account.\n"
+            f"The ticket is now available for others to purchase."
+        )
+    except:
+        pass
+    
+    await callback.message.edit_text(
+        f"✅ **Ticket Removed Successfully!**\n\n"
+        f"🎫 Ticket #{ticket_num}\n"
+        f"👤 User: {name or 'Unknown'}\n"
+        f"🆔 {tg_id}\n\n"
+        f"The ticket is now available for purchase.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 Back to Admin", callback_data="admin_back")]
+        ]),
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+@router.callback_query(F.data == "remove_cancel")
+async def admin_remove_cancel(callback: CallbackQuery, state: FSMContext):
+    uid = callback.from_user.id
+    if uid not in ADMIN_IDS:
+        await callback.answer("⛔ Unauthorized!", show_alert=True)
+        return
+    
+    await state.clear()
+    await callback.message.edit_text("❌ Cancelled.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 Back to Admin", callback_data="admin_back")]
+    ]))
+    await callback.answer()
 # =====================================================
 # DELETE USER HANDLERS - ADD THIS
 # =====================================================
@@ -1989,61 +2185,149 @@ async def send_broadcast(message: Message, state: FSMContext):
     await state.clear()
     await message.answer(get_text(uid, "broadcast_sent", sent=sent, total=len(users)), reply_markup=admin_menu(uid))
 
+# @router.message(F.text.in_(REPORTS_TEXTS))
 @router.message(F.text.in_(REPORTS_TEXTS))
 async def admin_reports(message: Message):
     uid = message.from_user.id
     if uid not in ADMIN_IDS:
         return
     
-    total = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM tickets")
-    available = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM tickets WHERE status = 'available'")
-    pending_tickets = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM tickets WHERE status = 'pending'")
-    sold = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM tickets WHERE status = 'sold'")
+    # Get comprehensive statistics
     total_users = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM users")
-    total_revenue = await DatabaseHelper.fetch_one("SELECT COALESCE(SUM(total_spent), 0) FROM users")
-    pending = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM payments WHERE status = 'pending'")
-    approved = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM payments WHERE status = 'approved'")
-    rejected = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM payments WHERE status = 'rejected'")
+    total_tickets = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM tickets")
+    available_tickets = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM tickets WHERE status = 'available'")
+    sold_tickets = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM tickets WHERE status = 'sold'")
+    pending_tickets = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM tickets WHERE status = 'pending'")
+    refunded_tickets = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM tickets WHERE status = 'refunded'")
     
-    text = (
-        f"📊 **System Reports**\n\n"
-        f"👤 Users: {total_users[0] or 0}\n"
-        f"📊 Total Tickets: {total[0] or 0}\n"
-        f"🎫 Available: {available[0] or 0}\n"
-        f"⏳ Pending: {pending_tickets[0] or 0}\n"
-        f"💰 Sold: {sold[0] or 0}\n"
-        f"💵 Revenue: {total_revenue[0] or 0:,.0f} ETB\n\n"
-        f"📋 Payments:\n"
-        f"⏳ Pending: {pending[0] or 0}\n"
-        f"✅ Approved: {approved[0] or 0}\n"
-        f"❌ Rejected: {rejected[0] or 0}"
+    total_payments = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM payments")
+    approved_payments = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM payments WHERE status = 'approved'")
+    pending_payments = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM payments WHERE status = 'pending'")
+    rejected_payments = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM payments WHERE status = 'rejected'")
+    
+    total_revenue = await DatabaseHelper.fetch_one("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE status = 'approved'")
+    total_pending_amount = await DatabaseHelper.fetch_one("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE status = 'pending'")
+    total_rejected_amount = await DatabaseHelper.fetch_one("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE status = 'rejected'")
+    
+    # Get users with most tickets
+    top_users = await DatabaseHelper.fetch("""
+        SELECT telegram_id, full_name, COUNT(*) as ticket_count
+        FROM tickets
+        WHERE status = 'sold' AND telegram_id IS NOT NULL
+        GROUP BY telegram_id, full_name
+        ORDER BY ticket_count DESC
+        LIMIT 10
+    """)
+    
+    # Get recent transactions
+    recent = await DatabaseHelper.fetch("""
+        SELECT p.payment_id, p.ticket_number, p.amount, p.status, p.created_at,
+               u.full_name, u.telegram_id
+        FROM payments p
+        LEFT JOIN users u ON p.user_id = u.user_id
+        ORDER BY p.created_at DESC
+        LIMIT 20
+    """)
+    
+    report_text = (
+        f"📊 **SYSTEM REPORTS**\n"
+        f"{'='*30}\n\n"
+        f"👤 **USERS:**\n"
+        f"Total Users: {total_users[0] if total_users else 0}\n\n"
+        f"🎫 **TICKETS:**\n"
+        f"Total: {total_tickets[0] if total_tickets else 0}\n"
+        f"Available: {available_tickets[0] if available_tickets else 0}\n"
+        f"Sold: {sold_tickets[0] if sold_tickets else 0}\n"
+        f"Pending: {pending_tickets[0] if pending_tickets else 0}\n"
+        f"Refunded: {refunded_tickets[0] if refunded_tickets else 0}\n\n"
+        f"💰 **PAYMENTS:**\n"
+        f"Total: {total_payments[0] if total_payments else 0}\n"
+        f"Approved: {approved_payments[0] if approved_payments else 0}\n"
+        f"Pending: {pending_payments[0] if pending_payments else 0}\n"
+        f"Rejected: {rejected_payments[0] if rejected_payments else 0}\n\n"
+        f"💵 **REVENUE:**\n"
+        f"Total Revenue: {total_revenue[0] if total_revenue else 0:,.2f} ETB\n"
+        f"Pending Amount: {total_pending_amount[0] if total_pending_amount else 0:,.2f} ETB\n"
+        f"Rejected Amount: {total_rejected_amount[0] if total_rejected_amount else 0:,.2f} ETB"
     )
     
+    # Add top users
+    if top_users:
+        report_text += "\n\n🏆 **TOP USERS:**\n"
+        for i, user in enumerate(top_users[:5], 1):
+            tg_id = user[0]
+            name = user[1] or f"User {tg_id}"
+            count = user[2]
+            report_text += f"{i}. {name} - {count} tickets\n"
+    
+    # Add recent transactions
+    if recent:
+        report_text += "\n📋 **RECENT TRANSACTIONS:**\n"
+        for tx in recent[:5]:
+            name = tx[5] or f"User {tx[6]}"
+            report_text += f"#{tx[1]} - {name} - {tx[2]:,.2f} ETB - {tx[3]}\n"
+    
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📥 Download Report", callback_data="download_report")],
+        [InlineKeyboardButton(text="📥 Download Full Report", callback_data="download_full_report")],
         [InlineKeyboardButton(text="🔙 Back", callback_data="admin_back")]
     ])
     
-    await message.answer(text, reply_markup=kb, parse_mode="Markdown")
+    await message.answer(report_text, reply_markup=kb, parse_mode="Markdown")
 
-@router.callback_query(F.data == "download_report")
-async def download_report(callback: CallbackQuery):
+@router.callback_query(F.data == "download_full_report")
+async def download_full_report(callback: CallbackQuery):
     uid = callback.from_user.id
     if uid not in ADMIN_IDS:
         await callback.answer("⛔ Unauthorized!", show_alert=True)
         return
     
-    tickets = await DatabaseHelper.fetch(
-        "SELECT ticket_number, telegram_id, full_name, phone_number, assigned_at, status FROM tickets WHERE status != 'available' ORDER BY assigned_at DESC"
-    )
+    # Fetch all data
+    users = await DatabaseHelper.fetch("SELECT * FROM users ORDER BY created_at DESC")
+    tickets = await DatabaseHelper.fetch("SELECT * FROM tickets ORDER BY ticket_number")
+    payments = await DatabaseHelper.fetch("SELECT * FROM payments ORDER BY created_at DESC")
     
-    csv = "Ticket,User ID,Name,Phone,Date,Status\n"
+    # Create CSV
+    import csv
+    import io
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Users
+    writer.writerow(["=== USERS ==="])
+    writer.writerow(["User ID", "Telegram ID", "Full Name", "Phone", "Address", "Balance", "Total Spent", "Registered"])
+    for u in users:
+        writer.writerow([u[0], u[1], u[2] or '', u[3] or '', u[4] or '', u[5] or 0, u[6] or 0, u[9]])
+    
+    writer.writerow([])
+    
+    # Tickets
+    writer.writerow(["=== TICKETS ==="])
+    writer.writerow(["Ticket ID", "Number", "Status", "User ID", "Telegram ID", "Phone", "Assigned At"])
     for t in tickets:
-        num, tg_id, name, phone, date, status = t
-        csv += f"{num},{tg_id or 'N/A'},{name or 'N/A'},{phone or 'N/A'},{date or 'N/A'},{status}\n"
+        writer.writerow([t[0], t[1], t[4] or '', t[5] or '', t[6] or '', t[7] or '', t[9] or ''])
     
-    file = io.BytesIO(csv.encode('utf-8'))
-    await callback.message.answer_document(BufferedInputFile(file.getvalue(), filename="tickets_report.csv"), caption="📊 Tickets Report")
+    writer.writerow([])
+    
+    # Payments
+    writer.writerow(["=== PAYMENTS ==="])
+    writer.writerow(["Payment ID", "User ID", "Telegram ID", "Ticket", "Amount", "Status", "Created At"])
+    for p in payments:
+        writer.writerow([p[0], p[1], p[2], p[4], p[10] or 0, p[8] or '', p[14] or ''])
+    
+    file = io.BytesIO(output.getvalue().encode('utf-8'))
+    await callback.message.answer_document(
+        BufferedInputFile(file.getvalue(), filename="full_report.csv"),
+        caption="📊 Full System Report"
+    )
+    await callback.answer()
+
+# Add to admin back handler
+@router.callback_query(F.data == "admin_back")
+async def admin_back(callback: CallbackQuery):
+    uid = callback.from_user.id
+    await callback.message.delete()
+    await callback.message.answer(get_text(uid, "admin_panel"), reply_markup=admin_menu(uid))
     await callback.answer()
 
 @router.message(F.text.in_(BUY_FOR_USER_TEXTS))
