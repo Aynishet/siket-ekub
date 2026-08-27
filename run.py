@@ -37,7 +37,7 @@ def start_dashboard():
             # Use port 8080 for dashboard (different from bot)
             port = int(os.environ.get('DASHBOARD_PORT', 8080))
             print(f"📡 Dashboard binding to port {port}")
-            serve(app, host='0.0.0.0', port=port, threads=4)
+            serve(app, host='0.0.0.0', port=port, threads=8)
         except Exception as e:
             print(f"❌ Dashboard failed to start: {e}")
             traceback.print_exc()
