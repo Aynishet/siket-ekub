@@ -2287,11 +2287,9 @@ async def download_full_report(callback: CallbackQuery):
     tickets = await DatabaseHelper.fetch("SELECT * FROM tickets ORDER BY ticket_number")
     payments = await DatabaseHelper.fetch("SELECT * FROM payments ORDER BY created_at DESC")
     
-    # Create Excel with multiple sheets
     try:
         import openpyxl
         from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-        from openpyxl.utils import get_column_letter
         
         wb = openpyxl.Workbook()
         
@@ -2301,53 +2299,63 @@ async def download_full_report(callback: CallbackQuery):
         ws_summary = wb.active
         ws_summary.title = "SUMMARY"
         
-        # Title
+        # FIX: Write to individual cells before merging
+        # Title - write to A1 first, then merge
         ws_summary['A1'] = "SIKET EKUB - SYSTEM REPORT"
         ws_summary['A1'].font = Font(size=16, bold=True)
         ws_summary.merge_cells('A1:E1')
         
-        # Date
+        # Date - write to A2 first, then merge
         ws_summary['A2'] = f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         ws_summary.merge_cells('A2:E2')
         
-        # Summary Statistics
+        # Write summary data WITHOUT trying to write to merged cells
+        # Start from row 4 to avoid merged cells
+        row_num = 4
+        ws_summary.cell(row=row_num, column=1, value="📊 SUMMARY STATISTICS")
+        ws_summary.cell(row=row_num, column=1).font = Font(bold=True, size=14)
+        row_num += 2
+        
+        # Write headers
+        ws_summary.cell(row=row_num, column=1, value="Category")
+        ws_summary.cell(row=row_num, column=2, value="Value")
+        ws_summary.cell(row=row_num, column=1).font = Font(bold=True)
+        ws_summary.cell(row=row_num, column=2).font = Font(bold=True)
+        row_num += 1
+        
+        # Data rows
         summary_data = [
-            ["📊 SUMMARY STATISTICS", ""],
-            ["", ""],
-            ["Category", "Value"],
-            ["Total Users", len(users)],
-            ["Total Tickets", len(tickets)],
-            ["Available Tickets", sum(1 for t in tickets if t[4] == 'available')],
-            ["Sold Tickets", sum(1 for t in tickets if t[4] == 'sold')],
-            ["Pending Tickets", sum(1 for t in tickets if t[4] == 'pending')],
-            ["Refunded Tickets", sum(1 for t in tickets if t[4] == 'refunded')],
-            ["", ""],
-            ["Total Payments", len(payments)],
-            ["Approved Payments", sum(1 for p in payments if p[8] == 'approved')],
-            ["Pending Payments", sum(1 for p in payments if p[8] == 'pending')],
-            ["Rejected Payments", sum(1 for p in payments if p[8] == 'rejected')],
-            ["", ""],
-            ["Total Revenue", f"{sum(float(p[10] or 0) for p in payments if p[8] == 'approved'):,.2f} ETB"],
-            ["Pending Amount", f"{sum(float(p[10] or 0) for p in payments if p[8] == 'pending'):,.2f} ETB"],
-            ["Rejected Amount", f"{sum(float(p[10] or 0) for p in payments if p[8] == 'rejected'):,.2f} ETB"],
+            ("Total Users", len(users)),
+            ("Total Tickets", len(tickets)),
+            ("Available Tickets", sum(1 for t in tickets if t[4] == 'available')),
+            ("Sold Tickets", sum(1 for t in tickets if t[4] == 'sold')),
+            ("Pending Tickets", sum(1 for t in tickets if t[4] == 'pending')),
+            ("Refunded Tickets", sum(1 for t in tickets if t[4] == 'refunded')),
+            ("", ""),
+            ("Total Payments", len(payments)),
+            ("Approved Payments", sum(1 for p in payments if p[8] == 'approved')),
+            ("Pending Payments", sum(1 for p in payments if p[8] == 'pending')),
+            ("Rejected Payments", sum(1 for p in payments if p[8] == 'rejected')),
+            ("", ""),
+            ("Total Revenue", f"{sum(float(p[10] or 0) for p in payments if p[8] == 'approved'):,.2f} ETB"),
+            ("Pending Amount", f"{sum(float(p[10] or 0) for p in payments if p[8] == 'pending'):,.2f} ETB"),
+            ("Rejected Amount", f"{sum(float(p[10] or 0) for p in payments if p[8] == 'rejected'):,.2f} ETB"),
         ]
         
-        for row_idx, row_data in enumerate(summary_data, 1):
-            for col_idx, value in enumerate(row_data, 1):
-                cell = ws_summary.cell(row=row_idx, column=col_idx, value=value)
-                if row_idx == 3 or row_idx == 4:
-                    cell.font = Font(bold=True)
+        for label, value in summary_data:
+            ws_summary.cell(row=row_num, column=1, value=label)
+            ws_summary.cell(row=row_num, column=2, value=value)
+            row_num += 1
         
-        # Format summary sheet
-        for col in ['A', 'B']:
-            ws_summary.column_dimensions[col].width = 25
+        # Format columns
+        ws_summary.column_dimensions['A'].width = 25
+        ws_summary.column_dimensions['B'].width = 25
         
         # ============================================================
         # SHEET 2: USERS
         # ============================================================
         ws_users = wb.create_sheet("USERS")
         
-        # Headers
         user_headers = ["User ID", "Telegram ID", "Full Name", "Phone", "Address", "Balance (ETB)", "Total Spent (ETB)", "Registered Date"]
         for col, header in enumerate(user_headers, 1):
             cell = ws_users.cell(row=1, column=col, value=header)
@@ -2355,7 +2363,6 @@ async def download_full_report(callback: CallbackQuery):
             cell.fill = PatternFill(start_color="2E86C1", end_color="2E86C1", fill_type="solid")
             cell.alignment = Alignment(horizontal="center")
         
-        # User data
         for row_idx, u in enumerate(users, 2):
             ws_users.cell(row=row_idx, column=1, value=u[0])
             ws_users.cell(row=row_idx, column=2, value=u[1])
@@ -2366,16 +2373,14 @@ async def download_full_report(callback: CallbackQuery):
             ws_users.cell(row=row_idx, column=7, value=float(u[6] or 0))
             ws_users.cell(row=row_idx, column=8, value=str(u[9]) if len(u) > 9 and u[9] else '')
         
-        # Auto-size columns
         for col in range(1, 9):
-            ws_users.column_dimensions[get_column_letter(col)].width = 18
+            ws_users.column_dimensions[openpyxl.utils.get_column_letter(col)].width = 18
         
         # ============================================================
         # SHEET 3: TICKETS
         # ============================================================
         ws_tickets = wb.create_sheet("TICKETS")
         
-        # Headers
         ticket_headers = ["Ticket ID", "Number", "Type", "Code", "Status", "User ID", "Telegram ID", "Phone", "Full Name", "Assigned At"]
         for col, header in enumerate(ticket_headers, 1):
             cell = ws_tickets.cell(row=1, column=col, value=header)
@@ -2383,7 +2388,6 @@ async def download_full_report(callback: CallbackQuery):
             cell.fill = PatternFill(start_color="27AE60", end_color="27AE60", fill_type="solid")
             cell.alignment = Alignment(horizontal="center")
         
-        # Ticket data
         for row_idx, t in enumerate(tickets, 2):
             ws_tickets.cell(row=row_idx, column=1, value=t[0])
             ws_tickets.cell(row=row_idx, column=2, value=t[1])
@@ -2396,16 +2400,14 @@ async def download_full_report(callback: CallbackQuery):
             ws_tickets.cell(row=row_idx, column=9, value=t[8] or '')
             ws_tickets.cell(row=row_idx, column=10, value=str(t[9]) if t[9] else '')
         
-        # Auto-size columns
         for col in range(1, 11):
-            ws_tickets.column_dimensions[get_column_letter(col)].width = 15
+            ws_tickets.column_dimensions[openpyxl.utils.get_column_letter(col)].width = 15
         
         # ============================================================
         # SHEET 4: PAYMENTS
         # ============================================================
         ws_payments = wb.create_sheet("PAYMENTS")
         
-        # Headers
         payment_headers = ["Payment ID", "User ID", "Telegram ID", "Phone", "Full Name", "Ticket", "Amount (ETB)", "Status", "Created At"]
         for col, header in enumerate(payment_headers, 1):
             cell = ws_payments.cell(row=1, column=col, value=header)
@@ -2413,7 +2415,6 @@ async def download_full_report(callback: CallbackQuery):
             cell.fill = PatternFill(start_color="E67E22", end_color="E67E22", fill_type="solid")
             cell.alignment = Alignment(horizontal="center")
         
-        # Payment data
         for row_idx, p in enumerate(payments, 2):
             ws_payments.cell(row=row_idx, column=1, value=p[0])
             ws_payments.cell(row=row_idx, column=2, value=p[1])
@@ -2434,19 +2435,17 @@ async def download_full_report(callback: CallbackQuery):
             elif p[8] == 'rejected':
                 status_cell.font = Font(color="E74C3C", bold=True)
         
-        # Auto-size columns
         for col in range(1, 10):
-            ws_payments.column_dimensions[get_column_letter(col)].width = 18
+            ws_payments.column_dimensions[openpyxl.utils.get_column_letter(col)].width = 18
         
         # ============================================================
         # SHEET 5: TOP USERS
         # ============================================================
         ws_top = wb.create_sheet("TOP USERS")
         
-        # Get top users by ticket count
         top_users = await DatabaseHelper.fetch("""
             SELECT telegram_id, full_name, phone_number, COUNT(*) as ticket_count,
-                   COALESCE(SUM(t.amount), 0) as total_paid
+                   COALESCE(SUM(amount), 0) as total_paid
             FROM tickets t
             LEFT JOIN users u ON t.telegram_id = u.telegram_id
             WHERE t.status = 'sold' AND t.telegram_id IS NOT NULL
@@ -2455,7 +2454,6 @@ async def download_full_report(callback: CallbackQuery):
             LIMIT 20
         """)
         
-        # Headers
         top_headers = ["Rank", "Telegram ID", "Full Name", "Phone", "Tickets", "Total Paid (ETB)"]
         for col, header in enumerate(top_headers, 1):
             cell = ws_top.cell(row=1, column=col, value=header)
@@ -2472,7 +2470,7 @@ async def download_full_report(callback: CallbackQuery):
             ws_top.cell(row=row_idx, column=6, value=float(u[4] or 0))
         
         for col in range(1, 7):
-            ws_top.column_dimensions[get_column_letter(col)].width = 18
+            ws_top.column_dimensions[openpyxl.utils.get_column_letter(col)].width = 18
         
         # ============================================================
         # SAVE
@@ -2492,7 +2490,7 @@ async def download_full_report(callback: CallbackQuery):
         await callback.answer("✅ Report generated successfully!")
         
     except ImportError:
-        # Fallback to CSV if openpyxl not installed
+        # Fallback to CSV
         await callback.answer("⚠️ openpyxl not installed, generating CSV...")
         
         import csv
