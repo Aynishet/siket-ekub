@@ -2280,51 +2280,249 @@ async def download_full_report(callback: CallbackQuery):
         await callback.answer("⛔ Unauthorized!", show_alert=True)
         return
     
-    await callback.answer("⏳ Generating report...")
+    await callback.answer("⏳ Generating detailed report...")
     
-    # Fetch all data - FIXED: use registration_date for users
+    # Fetch all data
     users = await DatabaseHelper.fetch("SELECT * FROM users ORDER BY registration_date DESC")
     tickets = await DatabaseHelper.fetch("SELECT * FROM tickets ORDER BY ticket_number")
     payments = await DatabaseHelper.fetch("SELECT * FROM payments ORDER BY created_at DESC")
     
-    # Create CSV
-    import csv
-    import io
-    
-    output = io.StringIO()
-    writer = csv.writer(output)
-    
-    # Users
-    writer.writerow(["=== USERS ==="])
-    writer.writerow(["User ID", "Telegram ID", "Full Name", "Phone", "Address", "Balance", "Total Spent", "Registered"])
-    for u in users:
-        if len(u) >= 10:
-            writer.writerow([u[0], u[1], u[2] or '', u[3] or '', u[4] or '', u[5] or 0, u[6] or 0, str(u[9]) if u[9] else ''])
-        else:
-            writer.writerow([u[0], u[1], u[2] or '', u[3] or '', u[4] or '', u[5] or 0, u[6] or 0, ''])
-    
-    writer.writerow([])
-    
-    # Tickets
-    writer.writerow(["=== TICKETS ==="])
-    writer.writerow(["Ticket ID", "Number", "Type", "Code", "Status", "User ID", "Telegram ID", "Phone", "Full Name", "Assigned At"])
-    for t in tickets:
-        writer.writerow([t[0], t[1], t[2] or '', t[3] or '', t[4] or '', t[5] or '', t[6] or '', t[7] or '', t[8] or '', str(t[9]) if t[9] else ''])
-    
-    writer.writerow([])
-    
-    # Payments
-    writer.writerow(["=== PAYMENTS ==="])
-    writer.writerow(["Payment ID", "User ID", "Telegram ID", "Phone", "Full Name", "Ticket", "Amount", "Status", "Created At"])
-    for p in payments:
-        writer.writerow([p[0], p[1], p[2], p[3] or '', p[4] or '', p[6] or '', p[10] or 0, p[8] or '', str(p[14]) if p[14] else ''])
-    
-    file = io.BytesIO(output.getvalue().encode('utf-8'))
-    await callback.message.answer_document(
-        BufferedInputFile(file.getvalue(), filename="full_report.csv"),
-        caption="📊 Full System Report"
-    )
-    await callback.answer()
+    # Create Excel with multiple sheets
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+        
+        wb = openpyxl.Workbook()
+        
+        # ============================================================
+        # SHEET 1: SUMMARY
+        # ============================================================
+        ws_summary = wb.active
+        ws_summary.title = "SUMMARY"
+        
+        # Title
+        ws_summary['A1'] = "SIKET EKUB - SYSTEM REPORT"
+        ws_summary['A1'].font = Font(size=16, bold=True)
+        ws_summary.merge_cells('A1:E1')
+        
+        # Date
+        ws_summary['A2'] = f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        ws_summary.merge_cells('A2:E2')
+        
+        # Summary Statistics
+        summary_data = [
+            ["📊 SUMMARY STATISTICS", ""],
+            ["", ""],
+            ["Category", "Value"],
+            ["Total Users", len(users)],
+            ["Total Tickets", len(tickets)],
+            ["Available Tickets", sum(1 for t in tickets if t[4] == 'available')],
+            ["Sold Tickets", sum(1 for t in tickets if t[4] == 'sold')],
+            ["Pending Tickets", sum(1 for t in tickets if t[4] == 'pending')],
+            ["Refunded Tickets", sum(1 for t in tickets if t[4] == 'refunded')],
+            ["", ""],
+            ["Total Payments", len(payments)],
+            ["Approved Payments", sum(1 for p in payments if p[8] == 'approved')],
+            ["Pending Payments", sum(1 for p in payments if p[8] == 'pending')],
+            ["Rejected Payments", sum(1 for p in payments if p[8] == 'rejected')],
+            ["", ""],
+            ["Total Revenue", f"{sum(float(p[10] or 0) for p in payments if p[8] == 'approved'):,.2f} ETB"],
+            ["Pending Amount", f"{sum(float(p[10] or 0) for p in payments if p[8] == 'pending'):,.2f} ETB"],
+            ["Rejected Amount", f"{sum(float(p[10] or 0) for p in payments if p[8] == 'rejected'):,.2f} ETB"],
+        ]
+        
+        for row_idx, row_data in enumerate(summary_data, 1):
+            for col_idx, value in enumerate(row_data, 1):
+                cell = ws_summary.cell(row=row_idx, column=col_idx, value=value)
+                if row_idx == 3 or row_idx == 4:
+                    cell.font = Font(bold=True)
+        
+        # Format summary sheet
+        for col in ['A', 'B']:
+            ws_summary.column_dimensions[col].width = 25
+        
+        # ============================================================
+        # SHEET 2: USERS
+        # ============================================================
+        ws_users = wb.create_sheet("USERS")
+        
+        # Headers
+        user_headers = ["User ID", "Telegram ID", "Full Name", "Phone", "Address", "Balance (ETB)", "Total Spent (ETB)", "Registered Date"]
+        for col, header in enumerate(user_headers, 1):
+            cell = ws_users.cell(row=1, column=col, value=header)
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill(start_color="2E86C1", end_color="2E86C1", fill_type="solid")
+            cell.alignment = Alignment(horizontal="center")
+        
+        # User data
+        for row_idx, u in enumerate(users, 2):
+            ws_users.cell(row=row_idx, column=1, value=u[0])
+            ws_users.cell(row=row_idx, column=2, value=u[1])
+            ws_users.cell(row=row_idx, column=3, value=u[2] or '')
+            ws_users.cell(row=row_idx, column=4, value=u[3] or '')
+            ws_users.cell(row=row_idx, column=5, value=u[4] or '')
+            ws_users.cell(row=row_idx, column=6, value=float(u[5] or 0))
+            ws_users.cell(row=row_idx, column=7, value=float(u[6] or 0))
+            ws_users.cell(row=row_idx, column=8, value=str(u[9]) if len(u) > 9 and u[9] else '')
+        
+        # Auto-size columns
+        for col in range(1, 9):
+            ws_users.column_dimensions[get_column_letter(col)].width = 18
+        
+        # ============================================================
+        # SHEET 3: TICKETS
+        # ============================================================
+        ws_tickets = wb.create_sheet("TICKETS")
+        
+        # Headers
+        ticket_headers = ["Ticket ID", "Number", "Type", "Code", "Status", "User ID", "Telegram ID", "Phone", "Full Name", "Assigned At"]
+        for col, header in enumerate(ticket_headers, 1):
+            cell = ws_tickets.cell(row=1, column=col, value=header)
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill(start_color="27AE60", end_color="27AE60", fill_type="solid")
+            cell.alignment = Alignment(horizontal="center")
+        
+        # Ticket data
+        for row_idx, t in enumerate(tickets, 2):
+            ws_tickets.cell(row=row_idx, column=1, value=t[0])
+            ws_tickets.cell(row=row_idx, column=2, value=t[1])
+            ws_tickets.cell(row=row_idx, column=3, value=t[2] or '')
+            ws_tickets.cell(row=row_idx, column=4, value=t[3] or '')
+            ws_tickets.cell(row=row_idx, column=5, value=t[4] or '')
+            ws_tickets.cell(row=row_idx, column=6, value=t[5] or '')
+            ws_tickets.cell(row=row_idx, column=7, value=t[6] or '')
+            ws_tickets.cell(row=row_idx, column=8, value=t[7] or '')
+            ws_tickets.cell(row=row_idx, column=9, value=t[8] or '')
+            ws_tickets.cell(row=row_idx, column=10, value=str(t[9]) if t[9] else '')
+        
+        # Auto-size columns
+        for col in range(1, 11):
+            ws_tickets.column_dimensions[get_column_letter(col)].width = 15
+        
+        # ============================================================
+        # SHEET 4: PAYMENTS
+        # ============================================================
+        ws_payments = wb.create_sheet("PAYMENTS")
+        
+        # Headers
+        payment_headers = ["Payment ID", "User ID", "Telegram ID", "Phone", "Full Name", "Ticket", "Amount (ETB)", "Status", "Created At"]
+        for col, header in enumerate(payment_headers, 1):
+            cell = ws_payments.cell(row=1, column=col, value=header)
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill(start_color="E67E22", end_color="E67E22", fill_type="solid")
+            cell.alignment = Alignment(horizontal="center")
+        
+        # Payment data
+        for row_idx, p in enumerate(payments, 2):
+            ws_payments.cell(row=row_idx, column=1, value=p[0])
+            ws_payments.cell(row=row_idx, column=2, value=p[1])
+            ws_payments.cell(row=row_idx, column=3, value=p[2])
+            ws_payments.cell(row=row_idx, column=4, value=p[3] or '')
+            ws_payments.cell(row=row_idx, column=5, value=p[4] or '')
+            ws_payments.cell(row=row_idx, column=6, value=p[6] or '')
+            ws_payments.cell(row=row_idx, column=7, value=float(p[10] or 0))
+            ws_payments.cell(row=row_idx, column=8, value=p[8] or '')
+            ws_payments.cell(row=row_idx, column=9, value=str(p[14]) if p[14] else '')
+            
+            # Color code status
+            status_cell = ws_payments.cell(row=row_idx, column=8)
+            if p[8] == 'approved':
+                status_cell.font = Font(color="27AE60", bold=True)
+            elif p[8] == 'pending':
+                status_cell.font = Font(color="F39C12", bold=True)
+            elif p[8] == 'rejected':
+                status_cell.font = Font(color="E74C3C", bold=True)
+        
+        # Auto-size columns
+        for col in range(1, 10):
+            ws_payments.column_dimensions[get_column_letter(col)].width = 18
+        
+        # ============================================================
+        # SHEET 5: TOP USERS
+        # ============================================================
+        ws_top = wb.create_sheet("TOP USERS")
+        
+        # Get top users by ticket count
+        top_users = await DatabaseHelper.fetch("""
+            SELECT telegram_id, full_name, phone_number, COUNT(*) as ticket_count,
+                   COALESCE(SUM(t.amount), 0) as total_paid
+            FROM tickets t
+            LEFT JOIN users u ON t.telegram_id = u.telegram_id
+            WHERE t.status = 'sold' AND t.telegram_id IS NOT NULL
+            GROUP BY t.telegram_id, u.full_name, u.phone_number
+            ORDER BY ticket_count DESC
+            LIMIT 20
+        """)
+        
+        # Headers
+        top_headers = ["Rank", "Telegram ID", "Full Name", "Phone", "Tickets", "Total Paid (ETB)"]
+        for col, header in enumerate(top_headers, 1):
+            cell = ws_top.cell(row=1, column=col, value=header)
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill(start_color="8E44AD", end_color="8E44AD", fill_type="solid")
+            cell.alignment = Alignment(horizontal="center")
+        
+        for row_idx, u in enumerate(top_users, 2):
+            ws_top.cell(row=row_idx, column=1, value=row_idx - 1)
+            ws_top.cell(row=row_idx, column=2, value=u[0])
+            ws_top.cell(row=row_idx, column=3, value=u[1] or '')
+            ws_top.cell(row=row_idx, column=4, value=u[2] or '')
+            ws_top.cell(row=row_idx, column=5, value=u[3])
+            ws_top.cell(row=row_idx, column=6, value=float(u[4] or 0))
+        
+        for col in range(1, 7):
+            ws_top.column_dimensions[get_column_letter(col)].width = 18
+        
+        # ============================================================
+        # SAVE
+        # ============================================================
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        await callback.message.answer_document(
+            BufferedInputFile(output.getvalue(), filename=f"siket_ekub_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"),
+            caption="📊 **Full System Report**\n\n"
+                   f"📋 {len(users)} Users\n"
+                   f"🎫 {len(tickets)} Tickets\n"
+                   f"💰 {len(payments)} Payments\n\n"
+                   "📌 Sheets: SUMMARY, USERS, TICKETS, PAYMENTS, TOP USERS"
+        )
+        await callback.answer("✅ Report generated successfully!")
+        
+    except ImportError:
+        # Fallback to CSV if openpyxl not installed
+        await callback.answer("⚠️ openpyxl not installed, generating CSV...")
+        
+        import csv
+        import io
+        
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        writer.writerow(["=== USERS ==="])
+        writer.writerow(["User ID", "Telegram ID", "Full Name", "Phone", "Address", "Balance", "Total Spent", "Registered"])
+        for u in users:
+            writer.writerow([u[0], u[1], u[2] or '', u[3] or '', u[4] or '', u[5] or 0, u[6] or 0, str(u[9]) if len(u) > 9 and u[9] else ''])
+        
+        writer.writerow([])
+        writer.writerow(["=== TICKETS ==="])
+        writer.writerow(["Ticket ID", "Number", "Type", "Code", "Status", "User ID", "Telegram ID", "Phone", "Full Name", "Assigned At"])
+        for t in tickets:
+            writer.writerow([t[0], t[1], t[2] or '', t[3] or '', t[4] or '', t[5] or '', t[6] or '', t[7] or '', t[8] or '', str(t[9]) if t[9] else ''])
+        
+        writer.writerow([])
+        writer.writerow(["=== PAYMENTS ==="])
+        writer.writerow(["Payment ID", "User ID", "Telegram ID", "Phone", "Full Name", "Ticket", "Amount", "Status", "Created At"])
+        for p in payments:
+            writer.writerow([p[0], p[1], p[2], p[3] or '', p[4] or '', p[6] or '', p[10] or 0, p[8] or '', str(p[14]) if p[14] else ''])
+        
+        file = io.BytesIO(output.getvalue().encode('utf-8'))
+        await callback.message.answer_document(
+            BufferedInputFile(file.getvalue(), filename=f"siket_ekub_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"),
+            caption="📊 Full System Report (CSV)"
+        )
 @router.message(AdminState.buy_user_id, F.text)
 async def admin_buy_user_id(message: Message, state: FSMContext):
     uid = message.from_user.id
