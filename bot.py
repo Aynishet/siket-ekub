@@ -2272,7 +2272,6 @@ async def admin_reports(message: Message):
     ])
     
     await message.answer(report_text, reply_markup=kb, parse_mode="Markdown")
-
 @router.callback_query(F.data == "download_full_report")
 async def download_full_report(callback: CallbackQuery):
     uid = callback.from_user.id
@@ -2280,49 +2279,35 @@ async def download_full_report(callback: CallbackQuery):
         await callback.answer("⛔ Unauthorized!", show_alert=True)
         return
     
-    await callback.answer("⏳ Generating detailed report...")
-    
-    # Fetch all data
-    users = await DatabaseHelper.fetch("SELECT * FROM users ORDER BY registration_date DESC")
-    tickets = await DatabaseHelper.fetch("SELECT * FROM tickets ORDER BY ticket_number")
-    payments = await DatabaseHelper.fetch("SELECT * FROM payments ORDER BY created_at DESC")
+    await callback.answer("⏳ Generating report...")
     
     try:
+        # Fetch all data
+        users = await DatabaseHelper.fetch("SELECT * FROM users ORDER BY registration_date DESC")
+        tickets = await DatabaseHelper.fetch("SELECT * FROM tickets ORDER BY ticket_number")
+        payments = await DatabaseHelper.fetch("SELECT * FROM payments ORDER BY created_at DESC")
+        
         import openpyxl
-        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.styles import Font, PatternFill, Alignment
         
         wb = openpyxl.Workbook()
         
         # ============================================================
-        # SHEET 1: SUMMARY - FIXED
+        # SHEET 1: SUMMARY - NO MERGED CELLS
         # ============================================================
         ws_summary = wb.active
         ws_summary.title = "SUMMARY"
         
-        # Write title and merge (DO NOT write to merged cells after this)
+        # Simple headers without merging
         ws_summary['A1'] = "SIKET EKUB - SYSTEM REPORT"
-        ws_summary['A1'].font = Font(size=16, bold=True)
-        ws_summary.merge_cells('A1:E1')
-        
+        ws_summary['A1'].font = Font(size=14, bold=True)
         ws_summary['A2'] = f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-        ws_summary.merge_cells('A2:E2')
         
-        # IMPORTANT: Start writing from row 4 (row 3 is empty)
-        row_num = 4
+        row = 4
+        ws_summary.cell(row=row, column=1, value="CATEGORY").font = Font(bold=True)
+        ws_summary.cell(row=row, column=2, value="VALUE").font = Font(bold=True)
+        row += 1
         
-        # Write summary header
-        ws_summary.cell(row=row_num, column=1, value="📊 SUMMARY STATISTICS")
-        ws_summary.cell(row=row_num, column=1).font = Font(bold=True, size=14)
-        row_num += 2
-        
-        # Write headers
-        ws_summary.cell(row=row_num, column=1, value="Category")
-        ws_summary.cell(row=row_num, column=2, value="Value")
-        ws_summary.cell(row=row_num, column=1).font = Font(bold=True)
-        ws_summary.cell(row=row_num, column=2).font = Font(bold=True)
-        row_num += 1
-        
-        # Data rows - USING THE CORRECT ROW_NUM VARIABLE
         summary_data = [
             ("Total Users", len(users)),
             ("Total Tickets", len(tickets)),
@@ -2342,11 +2327,10 @@ async def download_full_report(callback: CallbackQuery):
         ]
         
         for label, value in summary_data:
-            ws_summary.cell(row=row_num, column=1, value=label)
-            ws_summary.cell(row=row_num, column=2, value=value)
-            row_num += 1
+            ws_summary.cell(row=row, column=1, value=label)
+            ws_summary.cell(row=row, column=2, value=value)
+            row += 1
         
-        # Format columns
         ws_summary.column_dimensions['A'].width = 25
         ws_summary.column_dimensions['B'].width = 25
         
@@ -2355,22 +2339,21 @@ async def download_full_report(callback: CallbackQuery):
         # ============================================================
         ws_users = wb.create_sheet("USERS")
         
-        user_headers = ["User ID", "Telegram ID", "Full Name", "Phone", "Address", "Balance (ETB)", "Total Spent (ETB)", "Registered Date"]
-        for col, header in enumerate(user_headers, 1):
-            cell = ws_users.cell(row=1, column=col, value=header)
+        headers = ["ID", "Telegram ID", "Name", "Phone", "Address", "Balance", "Total Spent", "Registered"]
+        for col, h in enumerate(headers, 1):
+            cell = ws_users.cell(row=1, column=col, value=h)
             cell.font = Font(bold=True, color="FFFFFF")
             cell.fill = PatternFill(start_color="2E86C1", end_color="2E86C1", fill_type="solid")
-            cell.alignment = Alignment(horizontal="center")
         
-        for row_idx, u in enumerate(users, 2):
-            ws_users.cell(row=row_idx, column=1, value=u[0])
-            ws_users.cell(row=row_idx, column=2, value=u[1])
-            ws_users.cell(row=row_idx, column=3, value=u[2] or '')
-            ws_users.cell(row=row_idx, column=4, value=u[3] or '')
-            ws_users.cell(row=row_idx, column=5, value=u[4] or '')
-            ws_users.cell(row=row_idx, column=6, value=float(u[5] or 0))
-            ws_users.cell(row=row_idx, column=7, value=float(u[6] or 0))
-            ws_users.cell(row=row_idx, column=8, value=str(u[9]) if len(u) > 9 and u[9] else '')
+        for r, u in enumerate(users, 2):
+            ws_users.cell(row=r, column=1, value=u[0])
+            ws_users.cell(row=r, column=2, value=u[1])
+            ws_users.cell(row=r, column=3, value=u[2] or '')
+            ws_users.cell(row=r, column=4, value=u[3] or '')
+            ws_users.cell(row=r, column=5, value=u[4] or '')
+            ws_users.cell(row=r, column=6, value=float(u[5] or 0))
+            ws_users.cell(row=r, column=7, value=float(u[6] or 0))
+            ws_users.cell(row=r, column=8, value=str(u[9]) if len(u) > 9 and u[9] else '')
         
         for col in range(1, 9):
             ws_users.column_dimensions[openpyxl.utils.get_column_letter(col)].width = 18
@@ -2380,24 +2363,23 @@ async def download_full_report(callback: CallbackQuery):
         # ============================================================
         ws_tickets = wb.create_sheet("TICKETS")
         
-        ticket_headers = ["Ticket ID", "Number", "Type", "Code", "Status", "User ID", "Telegram ID", "Phone", "Full Name", "Assigned At"]
-        for col, header in enumerate(ticket_headers, 1):
-            cell = ws_tickets.cell(row=1, column=col, value=header)
+        headers = ["ID", "Number", "Type", "Code", "Status", "User ID", "Telegram ID", "Phone", "Name", "Assigned"]
+        for col, h in enumerate(headers, 1):
+            cell = ws_tickets.cell(row=1, column=col, value=h)
             cell.font = Font(bold=True, color="FFFFFF")
             cell.fill = PatternFill(start_color="27AE60", end_color="27AE60", fill_type="solid")
-            cell.alignment = Alignment(horizontal="center")
         
-        for row_idx, t in enumerate(tickets, 2):
-            ws_tickets.cell(row=row_idx, column=1, value=t[0])
-            ws_tickets.cell(row=row_idx, column=2, value=t[1])
-            ws_tickets.cell(row=row_idx, column=3, value=t[2] or '')
-            ws_tickets.cell(row=row_idx, column=4, value=t[3] or '')
-            ws_tickets.cell(row=row_idx, column=5, value=t[4] or '')
-            ws_tickets.cell(row=row_idx, column=6, value=t[5] or '')
-            ws_tickets.cell(row=row_idx, column=7, value=t[6] or '')
-            ws_tickets.cell(row=row_idx, column=8, value=t[7] or '')
-            ws_tickets.cell(row=row_idx, column=9, value=t[8] or '')
-            ws_tickets.cell(row=row_idx, column=10, value=str(t[9]) if t[9] else '')
+        for r, t in enumerate(tickets, 2):
+            ws_tickets.cell(row=r, column=1, value=t[0])
+            ws_tickets.cell(row=r, column=2, value=t[1])
+            ws_tickets.cell(row=r, column=3, value=t[2] or '')
+            ws_tickets.cell(row=r, column=4, value=t[3] or '')
+            ws_tickets.cell(row=r, column=5, value=t[4] or '')
+            ws_tickets.cell(row=r, column=6, value=t[5] or '')
+            ws_tickets.cell(row=r, column=7, value=t[6] or '')
+            ws_tickets.cell(row=r, column=8, value=t[7] or '')
+            ws_tickets.cell(row=r, column=9, value=t[8] or '')
+            ws_tickets.cell(row=r, column=10, value=str(t[9]) if t[9] else '')
         
         for col in range(1, 11):
             ws_tickets.column_dimensions[openpyxl.utils.get_column_letter(col)].width = 15
@@ -2407,32 +2389,22 @@ async def download_full_report(callback: CallbackQuery):
         # ============================================================
         ws_payments = wb.create_sheet("PAYMENTS")
         
-        payment_headers = ["Payment ID", "User ID", "Telegram ID", "Phone", "Full Name", "Ticket", "Amount (ETB)", "Status", "Created At"]
-        for col, header in enumerate(payment_headers, 1):
-            cell = ws_payments.cell(row=1, column=col, value=header)
+        headers = ["ID", "User ID", "Telegram ID", "Phone", "Name", "Ticket", "Amount", "Status", "Created"]
+        for col, h in enumerate(headers, 1):
+            cell = ws_payments.cell(row=1, column=col, value=h)
             cell.font = Font(bold=True, color="FFFFFF")
             cell.fill = PatternFill(start_color="E67E22", end_color="E67E22", fill_type="solid")
-            cell.alignment = Alignment(horizontal="center")
         
-        for row_idx, p in enumerate(payments, 2):
-            ws_payments.cell(row=row_idx, column=1, value=p[0])
-            ws_payments.cell(row=row_idx, column=2, value=p[1])
-            ws_payments.cell(row=row_idx, column=3, value=p[2])
-            ws_payments.cell(row=row_idx, column=4, value=p[3] or '')
-            ws_payments.cell(row=row_idx, column=5, value=p[4] or '')
-            ws_payments.cell(row=row_idx, column=6, value=p[6] or '')
-            ws_payments.cell(row=row_idx, column=7, value=float(p[10] or 0))
-            ws_payments.cell(row=row_idx, column=8, value=p[8] or '')
-            ws_payments.cell(row=row_idx, column=9, value=str(p[14]) if p[14] else '')
-            
-            # Color code status
-            status_cell = ws_payments.cell(row=row_idx, column=8)
-            if p[8] == 'approved':
-                status_cell.font = Font(color="27AE60", bold=True)
-            elif p[8] == 'pending':
-                status_cell.font = Font(color="F39C12", bold=True)
-            elif p[8] == 'rejected':
-                status_cell.font = Font(color="E74C3C", bold=True)
+        for r, p in enumerate(payments, 2):
+            ws_payments.cell(row=r, column=1, value=p[0])
+            ws_payments.cell(row=r, column=2, value=p[1])
+            ws_payments.cell(row=r, column=3, value=p[2])
+            ws_payments.cell(row=r, column=4, value=p[3] or '')
+            ws_payments.cell(row=r, column=5, value=p[4] or '')
+            ws_payments.cell(row=r, column=6, value=p[6] or '')
+            ws_payments.cell(row=r, column=7, value=float(p[10] or 0))
+            ws_payments.cell(row=r, column=8, value=p[8] or '')
+            ws_payments.cell(row=r, column=9, value=str(p[14]) if p[14] else '')
         
         for col in range(1, 10):
             ws_payments.column_dimensions[openpyxl.utils.get_column_letter(col)].width = 18
@@ -2453,26 +2425,25 @@ async def download_full_report(callback: CallbackQuery):
             LIMIT 20
         """)
         
-        top_headers = ["Rank", "Telegram ID", "Full Name", "Phone", "Tickets", "Total Paid (ETB)"]
-        for col, header in enumerate(top_headers, 1):
-            cell = ws_top.cell(row=1, column=col, value=header)
+        headers = ["Rank", "Telegram ID", "Name", "Phone", "Tickets", "Total Paid"]
+        for col, h in enumerate(headers, 1):
+            cell = ws_top.cell(row=1, column=col, value=h)
             cell.font = Font(bold=True, color="FFFFFF")
             cell.fill = PatternFill(start_color="8E44AD", end_color="8E44AD", fill_type="solid")
-            cell.alignment = Alignment(horizontal="center")
         
-        for row_idx, u in enumerate(top_users, 2):
-            ws_top.cell(row=row_idx, column=1, value=row_idx - 1)
-            ws_top.cell(row=row_idx, column=2, value=u[0])
-            ws_top.cell(row=row_idx, column=3, value=u[1] or '')
-            ws_top.cell(row=row_idx, column=4, value=u[2] or '')
-            ws_top.cell(row=row_idx, column=5, value=u[3])
-            ws_top.cell(row=row_idx, column=6, value=float(u[4] or 0))
+        for r, u in enumerate(top_users, 2):
+            ws_top.cell(row=r, column=1, value=r-1)
+            ws_top.cell(row=r, column=2, value=u[0])
+            ws_top.cell(row=r, column=3, value=u[1] or '')
+            ws_top.cell(row=r, column=4, value=u[2] or '')
+            ws_top.cell(row=r, column=5, value=u[3])
+            ws_top.cell(row=r, column=6, value=float(u[4] or 0))
         
         for col in range(1, 7):
             ws_top.column_dimensions[openpyxl.utils.get_column_letter(col)].width = 18
         
         # ============================================================
-        # SAVE
+        # SAVE AND SEND
         # ============================================================
         output = io.BytesIO()
         wb.save(output)
@@ -2490,7 +2461,7 @@ async def download_full_report(callback: CallbackQuery):
         
     except ImportError:
         # Fallback to CSV
-        await callback.answer("⚠️ openpyxl not installed, generating CSV...")
+        await callback.answer("⚠️ Generating CSV report...")
         
         import csv
         import io
@@ -2520,6 +2491,10 @@ async def download_full_report(callback: CallbackQuery):
             BufferedInputFile(file.getvalue(), filename=f"siket_ekub_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"),
             caption="📊 Full System Report (CSV)"
         )
+    
+    except Exception as e:
+        await callback.message.answer(f"❌ Error generating report: {str(e)[:100]}")
+        await callback.answer("❌ Report generation failed!")
 @router.message(AdminState.buy_user_id, F.text)
 async def admin_buy_user_id(message: Message, state: FSMContext):
     uid = message.from_user.id
