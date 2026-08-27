@@ -615,8 +615,9 @@ async def get_user_tickets(telegram_id: int):
     )
 
 async def get_all_users():
+    """Get all users - FIXED: use registration_date instead of created_at"""
     return await DatabaseHelper.fetch(
-        "SELECT user_id, telegram_id, full_name, phone_number, address, balance, total_spent, created_at FROM users ORDER BY created_at DESC"
+        "SELECT user_id, telegram_id, full_name, phone_number, address, balance, total_spent, registration_date FROM users ORDER BY registration_date DESC"
     )
 
 async def get_pending_payments():
@@ -2192,7 +2193,7 @@ async def admin_reports(message: Message):
     if uid not in ADMIN_IDS:
         return
     
-    # Get comprehensive statistics
+    # Get comprehensive statistics - FIXED: use correct column names
     total_users = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM users")
     total_tickets = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM tickets")
     available_tickets = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM tickets WHERE status = 'available'")
@@ -2209,7 +2210,7 @@ async def admin_reports(message: Message):
     total_pending_amount = await DatabaseHelper.fetch_one("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE status = 'pending'")
     total_rejected_amount = await DatabaseHelper.fetch_one("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE status = 'rejected'")
     
-    # Get users with most tickets
+    # Get users with most tickets - FIXED: use correct column names
     top_users = await DatabaseHelper.fetch("""
         SELECT telegram_id, full_name, COUNT(*) as ticket_count
         FROM tickets
@@ -2219,7 +2220,7 @@ async def admin_reports(message: Message):
         LIMIT 10
     """)
     
-    # Get recent transactions
+    # Get recent transactions - FIXED: use correct column names
     recent = await DatabaseHelper.fetch("""
         SELECT p.payment_id, p.ticket_number, p.amount, p.status, p.created_at,
                u.full_name, u.telegram_id
@@ -2273,16 +2274,9 @@ async def admin_reports(message: Message):
     ])
     
     await message.answer(report_text, reply_markup=kb, parse_mode="Markdown")
-
-@router.callback_query(F.data == "download_full_report")
-async def download_full_report(callback: CallbackQuery):
-    uid = callback.from_user.id
-    if uid not in ADMIN_IDS:
-        await callback.answer("⛔ Unauthorized!", show_alert=True)
-        return
     
-    # Fetch all data
-    users = await DatabaseHelper.fetch("SELECT * FROM users ORDER BY created_at DESC")
+    # Fetch all data - FIXED: use correct column names
+    users = await DatabaseHelper.fetch("SELECT * FROM users ORDER BY registration_date DESC")
     tickets = await DatabaseHelper.fetch("SELECT * FROM tickets ORDER BY ticket_number")
     payments = await DatabaseHelper.fetch("SELECT * FROM payments ORDER BY created_at DESC")
     
@@ -2293,27 +2287,31 @@ async def download_full_report(callback: CallbackQuery):
     output = io.StringIO()
     writer = csv.writer(output)
     
-    # Users
+    # Users - FIXED: use correct column names
     writer.writerow(["=== USERS ==="])
     writer.writerow(["User ID", "Telegram ID", "Full Name", "Phone", "Address", "Balance", "Total Spent", "Registered"])
     for u in users:
-        writer.writerow([u[0], u[1], u[2] or '', u[3] or '', u[4] or '', u[5] or 0, u[6] or 0, u[9]])
+        # Check if user tuple has the right length
+        if len(u) >= 10:
+            writer.writerow([u[0], u[1], u[2] or '', u[3] or '', u[4] or '', u[5] or 0, u[6] or 0, u[9] or ''])
+        else:
+            writer.writerow([u[0], u[1], u[2] or '', u[3] or '', u[4] or '', u[5] or 0, u[6] or 0, ''])
     
     writer.writerow([])
     
     # Tickets
     writer.writerow(["=== TICKETS ==="])
-    writer.writerow(["Ticket ID", "Number", "Status", "User ID", "Telegram ID", "Phone", "Assigned At"])
+    writer.writerow(["Ticket ID", "Number", "Type", "Code", "Status", "User ID", "Telegram ID", "Phone", "Full Name", "Assigned At"])
     for t in tickets:
-        writer.writerow([t[0], t[1], t[4] or '', t[5] or '', t[6] or '', t[7] or '', t[9] or ''])
+        writer.writerow([t[0], t[1], t[2] or '', t[3] or '', t[4] or '', t[5] or '', t[6] or '', t[7] or '', t[8] or '', t[9] or ''])
     
     writer.writerow([])
     
     # Payments
     writer.writerow(["=== PAYMENTS ==="])
-    writer.writerow(["Payment ID", "User ID", "Telegram ID", "Ticket", "Amount", "Status", "Created At"])
+    writer.writerow(["Payment ID", "User ID", "Telegram ID", "Phone", "Full Name", "Ticket", "Amount", "Status", "Created At"])
     for p in payments:
-        writer.writerow([p[0], p[1], p[2], p[4], p[10] or 0, p[8] or '', p[14] or ''])
+        writer.writerow([p[0], p[1], p[2], p[3] or '', p[4] or '', p[6] or '', p[10] or 0, p[8] or '', p[14] or ''])
     
     file = io.BytesIO(output.getvalue().encode('utf-8'))
     await callback.message.answer_document(
