@@ -2294,24 +2294,23 @@ async def download_full_report(callback: CallbackQuery):
         wb = openpyxl.Workbook()
         
         # ============================================================
-        # SHEET 1: SUMMARY
+        # SHEET 1: SUMMARY - FIXED
         # ============================================================
         ws_summary = wb.active
         ws_summary.title = "SUMMARY"
         
-        # FIX: Write to individual cells before merging
-        # Title - write to A1 first, then merge
+        # Write title and merge (DO NOT write to merged cells after this)
         ws_summary['A1'] = "SIKET EKUB - SYSTEM REPORT"
         ws_summary['A1'].font = Font(size=16, bold=True)
         ws_summary.merge_cells('A1:E1')
         
-        # Date - write to A2 first, then merge
         ws_summary['A2'] = f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         ws_summary.merge_cells('A2:E2')
         
-        # Write summary data WITHOUT trying to write to merged cells
-        # Start from row 4 to avoid merged cells
+        # IMPORTANT: Start writing from row 4 (row 3 is empty)
         row_num = 4
+        
+        # Write summary header
         ws_summary.cell(row=row_num, column=1, value="📊 SUMMARY STATISTICS")
         ws_summary.cell(row=row_num, column=1).font = Font(bold=True, size=14)
         row_num += 2
@@ -2323,7 +2322,7 @@ async def download_full_report(callback: CallbackQuery):
         ws_summary.cell(row=row_num, column=2).font = Font(bold=True)
         row_num += 1
         
-        # Data rows
+        # Data rows - USING THE CORRECT ROW_NUM VARIABLE
         summary_data = [
             ("Total Users", len(users)),
             ("Total Tickets", len(tickets)),
