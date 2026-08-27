@@ -2298,7 +2298,6 @@ async def download_full_report(callback: CallbackQuery):
         ws_summary = wb.active
         ws_summary.title = "SUMMARY"
         
-        # Simple headers without merging
         ws_summary['A1'] = "SIKET EKUB - SYSTEM REPORT"
         ws_summary['A1'].font = Font(size=14, bold=True)
         ws_summary['A2'] = f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
@@ -2307,6 +2306,34 @@ async def download_full_report(callback: CallbackQuery):
         ws_summary.cell(row=row, column=1, value="CATEGORY").font = Font(bold=True)
         ws_summary.cell(row=row, column=2, value="VALUE").font = Font(bold=True)
         row += 1
+        
+        # Helper function to safely get amount
+        def safe_amount(value):
+            if value is None:
+                return 0
+            if isinstance(value, (int, float)):
+                return float(value)
+            if isinstance(value, str):
+                try:
+                    return float(value)
+                except:
+                    return 0
+            return 0
+        
+        # Calculate amounts safely
+        total_revenue = 0
+        total_pending = 0
+        total_rejected = 0
+        
+        for p in payments:
+            amount = safe_amount(p[10] if len(p) > 10 else 0)
+            status = p[8] if len(p) > 8 else ''
+            if status == 'approved':
+                total_revenue += amount
+            elif status == 'pending':
+                total_pending += amount
+            elif status == 'rejected':
+                total_rejected += amount
         
         summary_data = [
             ("Total Users", len(users)),
@@ -2321,9 +2348,9 @@ async def download_full_report(callback: CallbackQuery):
             ("Pending Payments", sum(1 for p in payments if p[8] == 'pending')),
             ("Rejected Payments", sum(1 for p in payments if p[8] == 'rejected')),
             ("", ""),
-            ("Total Revenue", f"{sum(float(p[10] or 0) for p in payments if p[8] == 'approved'):,.2f} ETB"),
-            ("Pending Amount", f"{sum(float(p[10] or 0) for p in payments if p[8] == 'pending'):,.2f} ETB"),
-            ("Rejected Amount", f"{sum(float(p[10] or 0) for p in payments if p[8] == 'rejected'):,.2f} ETB"),
+            ("Total Revenue", f"{total_revenue:,.2f} ETB"),
+            ("Pending Amount", f"{total_pending:,.2f} ETB"),
+            ("Rejected Amount", f"{total_rejected:,.2f} ETB"),
         ]
         
         for label, value in summary_data:
@@ -2351,8 +2378,12 @@ async def download_full_report(callback: CallbackQuery):
             ws_users.cell(row=r, column=3, value=u[2] or '')
             ws_users.cell(row=r, column=4, value=u[3] or '')
             ws_users.cell(row=r, column=5, value=u[4] or '')
-            ws_users.cell(row=r, column=6, value=float(u[5] or 0))
-            ws_users.cell(row=r, column=7, value=float(u[6] or 0))
+            
+            # Safe balance and total_spent
+            balance = safe_amount(u[5] if len(u) > 5 else 0)
+            total_spent = safe_amount(u[6] if len(u) > 6 else 0)
+            ws_users.cell(row=r, column=6, value=balance)
+            ws_users.cell(row=r, column=7, value=total_spent)
             ws_users.cell(row=r, column=8, value=str(u[9]) if len(u) > 9 and u[9] else '')
         
         for col in range(1, 9):
@@ -2402,9 +2433,18 @@ async def download_full_report(callback: CallbackQuery):
             ws_payments.cell(row=r, column=4, value=p[3] or '')
             ws_payments.cell(row=r, column=5, value=p[4] or '')
             ws_payments.cell(row=r, column=6, value=p[6] or '')
-            ws_payments.cell(row=r, column=7, value=float(p[10] or 0))
+            
+            # Safe amount - FIXED: check if it's datetime
+            amount_val = p[10] if len(p) > 10 else 0
+            if isinstance(amount_val, datetime):
+                amount_val = 0
+            try:
+                amount = float(amount_val)
+            except (ValueError, TypeError):
+                amount = 0
+            ws_payments.cell(row=r, column=7, value=amount)
             ws_payments.cell(row=r, column=8, value=p[8] or '')
-            ws_payments.cell(row=r, column=9, value=str(p[14]) if p[14] else '')
+            ws_payments.cell(row=r, column=9, value=str(p[14]) if len(p) > 14 and p[14] else '')
         
         for col in range(1, 10):
             ws_payments.column_dimensions[openpyxl.utils.get_column_letter(col)].width = 18
@@ -2419,6 +2459,7 @@ async def download_full_report(callback: CallbackQuery):
                    COALESCE(SUM(amount), 0) as total_paid
             FROM tickets t
             LEFT JOIN users u ON t.telegram_id = u.telegram_id
+            LEFT JOIN payments p ON t.telegram_id = p.telegram_id
             WHERE t.status = 'sold' AND t.telegram_id IS NOT NULL
             GROUP BY t.telegram_id, u.full_name, u.phone_number
             ORDER BY ticket_count DESC
@@ -2437,7 +2478,8 @@ async def download_full_report(callback: CallbackQuery):
             ws_top.cell(row=r, column=3, value=u[1] or '')
             ws_top.cell(row=r, column=4, value=u[2] or '')
             ws_top.cell(row=r, column=5, value=u[3])
-            ws_top.cell(row=r, column=6, value=float(u[4] or 0))
+            paid_amount = safe_amount(u[4] if len(u) > 4 else 0)
+            ws_top.cell(row=r, column=6, value=paid_amount)
         
         for col in range(1, 7):
             ws_top.column_dimensions[openpyxl.utils.get_column_letter(col)].width = 18
@@ -2459,42 +2501,11 @@ async def download_full_report(callback: CallbackQuery):
         )
         await callback.answer("✅ Report generated successfully!")
         
-    except ImportError:
-        # Fallback to CSV
-        await callback.answer("⚠️ Generating CSV report...")
-        
-        import csv
-        import io
-        
-        output = io.StringIO()
-        writer = csv.writer(output)
-        
-        writer.writerow(["=== USERS ==="])
-        writer.writerow(["User ID", "Telegram ID", "Full Name", "Phone", "Address", "Balance", "Total Spent", "Registered"])
-        for u in users:
-            writer.writerow([u[0], u[1], u[2] or '', u[3] or '', u[4] or '', u[5] or 0, u[6] or 0, str(u[9]) if len(u) > 9 and u[9] else ''])
-        
-        writer.writerow([])
-        writer.writerow(["=== TICKETS ==="])
-        writer.writerow(["Ticket ID", "Number", "Type", "Code", "Status", "User ID", "Telegram ID", "Phone", "Full Name", "Assigned At"])
-        for t in tickets:
-            writer.writerow([t[0], t[1], t[2] or '', t[3] or '', t[4] or '', t[5] or '', t[6] or '', t[7] or '', t[8] or '', str(t[9]) if t[9] else ''])
-        
-        writer.writerow([])
-        writer.writerow(["=== PAYMENTS ==="])
-        writer.writerow(["Payment ID", "User ID", "Telegram ID", "Phone", "Full Name", "Ticket", "Amount", "Status", "Created At"])
-        for p in payments:
-            writer.writerow([p[0], p[1], p[2], p[3] or '', p[4] or '', p[6] or '', p[10] or 0, p[8] or '', str(p[14]) if p[14] else ''])
-        
-        file = io.BytesIO(output.getvalue().encode('utf-8'))
-        await callback.message.answer_document(
-            BufferedInputFile(file.getvalue(), filename=f"siket_ekub_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"),
-            caption="📊 Full System Report (CSV)"
-        )
-    
     except Exception as e:
-        await callback.message.answer(f"❌ Error generating report: {str(e)[:100]}")
+        await callback.message.answer(f"❌ Error generating report: {str(e)[:200]}")
         await callback.answer("❌ Report generation failed!")
+        import traceback
+        traceback.print_exc()
 @router.message(AdminState.buy_user_id, F.text)
 async def admin_buy_user_id(message: Message, state: FSMContext):
     uid = message.from_user.id
