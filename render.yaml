@@ -10,8 +10,6 @@ services:
     startCommand: python run.py
     envVars:
       # ====== REQUIRED ======
-      - key: BOT_TOKEN
-        value: 8929371440:AAG6IJecCNOejz57TQh-dvNyDDR10wCQ9ww
       - key: ADMIN_IDS
         value: "699428281,1029660827"
             - key: PORT
