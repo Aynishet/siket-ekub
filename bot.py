@@ -615,7 +615,6 @@ async def get_user_tickets(telegram_id: int):
     )
 
 async def get_all_users():
-    """Get all users - FIXED: use registration_date instead of created_at"""
     return await DatabaseHelper.fetch(
         "SELECT user_id, telegram_id, full_name, phone_number, address, balance, total_spent, registration_date FROM users ORDER BY registration_date DESC"
     )
@@ -2186,14 +2185,13 @@ async def send_broadcast(message: Message, state: FSMContext):
     await state.clear()
     await message.answer(get_text(uid, "broadcast_sent", sent=sent, total=len(users)), reply_markup=admin_menu(uid))
 
-# @router.message(F.text.in_(REPORTS_TEXTS))
 @router.message(F.text.in_(REPORTS_TEXTS))
 async def admin_reports(message: Message):
     uid = message.from_user.id
     if uid not in ADMIN_IDS:
         return
     
-    # Get comprehensive statistics - FIXED: use correct column names
+    # Get comprehensive statistics
     total_users = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM users")
     total_tickets = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM tickets")
     available_tickets = await DatabaseHelper.fetch_one("SELECT COUNT(*) FROM tickets WHERE status = 'available'")
@@ -2210,7 +2208,7 @@ async def admin_reports(message: Message):
     total_pending_amount = await DatabaseHelper.fetch_one("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE status = 'pending'")
     total_rejected_amount = await DatabaseHelper.fetch_one("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE status = 'rejected'")
     
-    # Get users with most tickets - FIXED: use correct column names
+    # Get users with most tickets
     top_users = await DatabaseHelper.fetch("""
         SELECT telegram_id, full_name, COUNT(*) as ticket_count
         FROM tickets
@@ -2220,7 +2218,7 @@ async def admin_reports(message: Message):
         LIMIT 10
     """)
     
-    # Get recent transactions - FIXED: use correct column names
+    # Get recent transactions
     recent = await DatabaseHelper.fetch("""
         SELECT p.payment_id, p.ticket_number, p.amount, p.status, p.created_at,
                u.full_name, u.telegram_id
@@ -2274,8 +2272,17 @@ async def admin_reports(message: Message):
     ])
     
     await message.answer(report_text, reply_markup=kb, parse_mode="Markdown")
+
+@router.callback_query(F.data == "download_full_report")
+async def download_full_report(callback: CallbackQuery):
+    uid = callback.from_user.id
+    if uid not in ADMIN_IDS:
+        await callback.answer("⛔ Unauthorized!", show_alert=True)
+        return
     
-    # Fetch all data - FIXED: use correct column names
+    await callback.answer("⏳ Generating report...")
+    
+    # Fetch all data - FIXED: use registration_date for users
     users = await DatabaseHelper.fetch("SELECT * FROM users ORDER BY registration_date DESC")
     tickets = await DatabaseHelper.fetch("SELECT * FROM tickets ORDER BY ticket_number")
     payments = await DatabaseHelper.fetch("SELECT * FROM payments ORDER BY created_at DESC")
@@ -2287,13 +2294,12 @@ async def admin_reports(message: Message):
     output = io.StringIO()
     writer = csv.writer(output)
     
-    # Users - FIXED: use correct column names
+    # Users
     writer.writerow(["=== USERS ==="])
     writer.writerow(["User ID", "Telegram ID", "Full Name", "Phone", "Address", "Balance", "Total Spent", "Registered"])
     for u in users:
-        # Check if user tuple has the right length
         if len(u) >= 10:
-            writer.writerow([u[0], u[1], u[2] or '', u[3] or '', u[4] or '', u[5] or 0, u[6] or 0, u[9] or ''])
+            writer.writerow([u[0], u[1], u[2] or '', u[3] or '', u[4] or '', u[5] or 0, u[6] or 0, str(u[9]) if u[9] else ''])
         else:
             writer.writerow([u[0], u[1], u[2] or '', u[3] or '', u[4] or '', u[5] or 0, u[6] or 0, ''])
     
@@ -2303,7 +2309,7 @@ async def admin_reports(message: Message):
     writer.writerow(["=== TICKETS ==="])
     writer.writerow(["Ticket ID", "Number", "Type", "Code", "Status", "User ID", "Telegram ID", "Phone", "Full Name", "Assigned At"])
     for t in tickets:
-        writer.writerow([t[0], t[1], t[2] or '', t[3] or '', t[4] or '', t[5] or '', t[6] or '', t[7] or '', t[8] or '', t[9] or ''])
+        writer.writerow([t[0], t[1], t[2] or '', t[3] or '', t[4] or '', t[5] or '', t[6] or '', t[7] or '', t[8] or '', str(t[9]) if t[9] else ''])
     
     writer.writerow([])
     
@@ -2311,7 +2317,7 @@ async def admin_reports(message: Message):
     writer.writerow(["=== PAYMENTS ==="])
     writer.writerow(["Payment ID", "User ID", "Telegram ID", "Phone", "Full Name", "Ticket", "Amount", "Status", "Created At"])
     for p in payments:
-        writer.writerow([p[0], p[1], p[2], p[3] or '', p[4] or '', p[6] or '', p[10] or 0, p[8] or '', p[14] or ''])
+        writer.writerow([p[0], p[1], p[2], p[3] or '', p[4] or '', p[6] or '', p[10] or 0, p[8] or '', str(p[14]) if p[14] else ''])
     
     file = io.BytesIO(output.getvalue().encode('utf-8'))
     await callback.message.answer_document(
@@ -2319,26 +2325,6 @@ async def admin_reports(message: Message):
         caption="📊 Full System Report"
     )
     await callback.answer()
-
-# Add to admin back handler
-@router.callback_query(F.data == "admin_back")
-async def admin_back(callback: CallbackQuery):
-    uid = callback.from_user.id
-    await callback.message.delete()
-    await callback.message.answer(get_text(uid, "admin_panel"), reply_markup=admin_menu(uid))
-    await callback.answer()
-
-@router.message(F.text.in_(BUY_FOR_USER_TEXTS))
-async def admin_buy_user(message: Message, state: FSMContext):
-    uid = message.from_user.id
-    if uid not in ADMIN_IDS:
-        return
-    
-    await message.answer(get_text(uid, "enter_user_id"), reply_markup=ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=get_text(uid, "back_user"))]], resize_keyboard=True
-    ))
-    await state.set_state(AdminState.buy_user_id)
-
 @router.message(AdminState.buy_user_id, F.text)
 async def admin_buy_user_id(message: Message, state: FSMContext):
     uid = message.from_user.id
