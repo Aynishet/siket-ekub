@@ -10,9 +10,7 @@ services:
     startCommand: python run.py
     envVars:
       # ====== REQUIRED ======
-      - key: ADMIN_IDS
-        value: "699428281,1029660827"
-            - key: PORT
+      - key: PORT
         value: "10000"
       - key: DASHBOARD_PORT
         value: "10001"
